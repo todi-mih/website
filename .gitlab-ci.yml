@@ -88,7 +88,7 @@ pages:
   stage: deploy
   script:
     - ./build.sh
-    - mv website/build ../public
+    - mv website/build public
   artifacts:
     paths:
       - public
