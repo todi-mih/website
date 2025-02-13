@@ -75,7 +75,8 @@ test website:
   rules:
     - if: $CI_COMMIT_REF_NAME != $CI_DEFAULT_BRANCH
       changes:
-        - website/**
+        - website/**/*
+        - website/*
   needs:
     - job: test fake slides
     - job: test slides acs_cc
@@ -96,5 +97,7 @@ pages:
       changes:
         - build.sh
         - slides/**/*
+        - slides/*
         - website/**/*
+        - website/*
   
