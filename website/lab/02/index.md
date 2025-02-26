@@ -1,357 +1,805 @@
 ---
-description: Pulse Width Modulation and Analog to Digital Converters
+description: Bare metal MMIO, PAC access and embassy-rs
 slug: /lab/02
+unlisted: true
 ---
 
-# 02 - PWM & ADC
+# 02 - Memory Mapped IO & GPIO
 
-This lab will teach you the difference between digital and analog signals, how to simulate analog signals by using Pulse Width Modulation (PWM) and how to convert analog signals to digital ones using Analog-to-Digital Converters (ADC).
+The purpose of this lab is to understand how to start developing in [Rust](https://www.rust-lang.org/) for the
+RP2040 MCU. The lab presents three examples:
+ - **bare metal** development - writing directly to registers, actually writing a driver
+ - **platform access crate** (PAC) - using an automatically generated crate from the MCUs SVD file, actually writing a driver, but with some kind of automation
+ - **embassy-rs** - using the Rust standard [`embedded-hal`](https://docs.rs/embedded-hal/latest/embedded_hal/) implemented by the [Embassy-rs](https://embassy.dev/) framework.
 
+:::info
+The example of this lab is to blink an LED at a certain time interval.
+:::
 
 ## Resources
 
 1. **Raspberry Pi Ltd**, *[RP2040 Datasheet](https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf)*
-    - Chapter 2 - *System Description*
-     - Chapter 2.15 - *Clocks*
-       - Subchapter 2.15.1
-       - Subchapter 2.15.2
-   - Chapter 4 - *Peripherals*
-     - Chapter 4.5 - *PWM*
-     - Chapter 4.6 - *Timer*
-     - Chapter 4.9 - *ADC and Temperature Sensor*
-       - Subchapter 4.9.1
-       - Subchapter 4.9.2
-       - Subchapter 4.9.5
+2. **Raspberry Pi Ltd**, *[Raspberry Pi Pico Datasheet](https://datasheets.raspberrypi.com/pico/pico-datasheet.pdf)*
+3. **Raspberry Pi Ltd**, *[Raspberry Pi Pico W Datasheet](https://datasheets.raspberrypi.com/picow/pico-w-datasheet.pdf)*
 
-2. **Paul Denisowski**, *[Understanding PWM](https://www.youtube.com/watch?v=nXFoVSN3u-E)*
+## What is GPIO?
 
-## Timing
+General-Purpose Input/Output, or GPIO, is an essential part of embedded systems that serves as a vital conduit between microcontrollers and microprocessors and the outside world. A microcontroller or microprocessor's group of pins that can each be set to operate as an input or an output is referred to as GPIO. The purpose of these pins is to interface external components, including actuators, displays, sensors, and other devices, so that the embedded system may communicate with its surroundings. Standardised communication protocols like SPI, I2C, PCM, PWM, and serial communication may be directly supported by some GPIO pins. There are two varieties of GPIO pins: digital and analog.
 
-In embedded applications, keeping track of time is crucial. Even for the simple task of blinking a led at a certain time interval, we need a reference of time that is constant and precise. 
+## Configuring GPIO Pins
 
-### Clocks
+GPIO pins can be used as outputs (LEDs, motors, buzzers) or as inputs (buttons, sensors).
 
-A clock is a piece of hardware that provides us with that reference. Its purpose is to oscillate at a fixed frequency and provide a signal that switches from high to low at a fixed interval.
+The R02040 has three peripherals that control the GPIO pins:
+ 1. *Pads* - control the actual physical pin or pad that the processor has outside. This control the electrical parameters, like maximum current or pull up and pull down resistors
+ 2. *IO Bank0* - connects and multiplexes the peripheral's pins to the output pads. Several peripherals use the same output pad to communicate with the exterior. For example, in the image below, `GPIO0` can be used either for:
+    * `SIO` - the `GPIO` function
+    * `SPI_RX` - the receive pin for the `SPI` peripheral
+    * `I2C0_SDA` - the data pin for the `I2C0` peripheral
+    * `UART0_TX` - the transmit pin for the `UART0` (serial port 0) peripheral
+ 3. *SIO* - that controls the interior MCU's pins. This is the peripheral that developers use to read and write the value of the pins.
 
-![ClockSignal](images/clock_signal.png)
+![Pico Pinout](images/pico-pinout.svg)
 
-The most precise type of clock is the crystal oscillator (XOSC). The reason why it is so accurate is because it uses the crystal's natural vibration frequency to create the clock signal. This clock is usually external to the processor itself, but the processor also has an internal clock (ROSC) that is less accurate and that can be used in cases where small variations of clock  pulses are negligeable. When using the USB protocol, for instance, a more stable clock signal is required, therefore the XOSC is necessary.
-The crystal oscillator on the Raspberry Pi Pico board has a frequency of 12MHz. 
+Every pin of the MCU can perform multiple functions. Several peripherals need to use input and output pins.
+It is the role of the *IO Bank0* to multiplex and connect the peripherals to the pins.
 
-This clock signal is just a reference, and most of the time we need to adjust it to our needs. This is done by either multiplying or dividing the clock, or in other words, elevating or lowering the frequency of the clock. For example, the RP2040 itself runs on a 125MHz clock, so the crystal oscillator frequency of 12MHz is multiplied (this is done using a method called Phase-Locked Loop).
+<div align="center">
+![IO Bank0](images/gpio_mux.png)
+</div>
 
-![RPCrystal](images/rp_crystal.png)
+## Hardware access
 
-### Counters
+There are 3 different ways in which the hardware the Raspberry Pi Pico can be used:
 
-A counter is a piece of hardware logic that counts, as its name suggests. Every clock cycle, it increments the value of a register, until it overflows and starts anew. 
+1. Embassy-rs framework, with the Embedded HAL implementation
+2. Platform Access Crate (PAC)
+3. Bare metal
+
+## Embedded HAL Implementation
+
+The bare metal and PAC require a lot of time and effort to develop applications.
+
+The Rust [Embedded devices Working Group](https://www.rust-lang.org/governance/wgs/embedded) has designed 
+a  set of standard traits (interfaces) for interacting with an MCU. This is called the **Embedded Hardware Abstraction Layer**, or shortly Embedded HAL. The main purpose is to define a common hardware interface that
+frameworks, libraries and operating systems can build upon. Regardless of what MCUs the device is using, the upper level software should be as portable as possible.
+
+There are several crates and frameworks that implement the Embedded HAL traits for the RP2040 MCU.
+- [rp2040_hal](https://docs.rs/rp2040-hal/latest/rp2040_hal/) crate, implements just the embedded HAL traits, it is *the bare minimum* for developing RP2040 applications
+- [embassy-rp](https://docs.embassy.dev/embassy-rp/git/rp2040/index.html) crate implements the Embedded HAL for RP2040 that is used with the [embassy-rs](https://embassy.dev/) framework
+
+### Embassy-rs framework
+
+[Embassy-rs](https://embassy.dev/) is a full fledged embedded framework for Rust embedded development.
+Besides the implementation of the embedded HAL for different MCUs (RP2040 included), embassy-rs provides
+several functions like timers, BLE and network communication.
+
+<div align="center">
+![Rust EMbedded Stack](images/rust_embedded_stack.svg)
+</div>
+
+The crates used by Embassy-rs and their mapping are shown in the table bellow.
+
+| Crate | Position |
+|-------|----------|
+| [`embassy-executor`](https://docs.embassy.dev/embassy-executor/git/cortex-m/index.html) | Framework |
+| [`smoltcp`](https://docs.rs/smoltcp/latest/smoltcp/), [`defmt`](https://docs.rs/defmt/latest/defmt/) | Libraries |
+| [`embassy-net`](https://docs.embassy.dev/embassy-net/git/default/index.html), [`embassy-time`](https://docs.embassy.dev/embassy-time/git/default/index.html), [`embassy-usb`](https://docs.embassy.dev/embassy-usb/git/default/index.html), [`embassy-usb-logger`](https://docs.embassy.dev/embassy-usb-logger/git/default/index.html) | Framework Driver |
+| [`embassy-usb-driver`](https://docs.embassy.dev/embassy-usb-driver/git/default/index.html), [`embassy-time-driver`](https://docs.embassy.dev/embassy-time-driver/git/default/index.html) | Embassy HAL (API) |
+| [`cyw43`](https://docs.embassy.dev/cyw43/git/default/index.html), [`cyw43-pio`](https://docs.embassy.dev/cyw43-pio/git/default/index.html) | Driver (WiFi) |
+| [`embedded-hal`](https://docs.rs/embedded-hal/latest/embedded_hal/), [`embedded-hal-async`](https://docs.rs/embedded-hal-async/latest/embedded_hal_async/)| **Rust Embedded HAL (Standard)** |
+| [`embassy_rp`](https://docs.embassy.dev/embassy-rp/git/rp2040/index.html) | HAL Implementation |
+| [`cortex-m`](https://docs.rs/cortex-m/latest/cortex_m/), [`cortex-m-rt`](https://docs.rs/cortex-m-rt/latest/cortex_m_rt/) | μ-architecture crates |
+| [`rp_pac`](https://docs.embassy.dev/rp-pac/git/default/index.html) | Platform Access Crate |
 
 :::info
-A regular counter on 8 bits would count up from 0 to 255, then loop back to 0 and continue counting. 
+
+The name *Embassy-rs* is derived form **Emb**edded **Asy**nchronous Rust.
+
 :::
 
-In theory a counter is associated with 3 registers:
+### Entry
 
-| Register | Description |
-|-----------|----------|
-| `value` | the current value of the counter |
-| `direction` | whether the counter is counting UP or DOWN |
-| `reset` | if the direction is UP, the value at which the counter resets to 0; if the direction is DOWN, the value at which the counter reset after reaching 0 |
+Embassy-rs is a framework built on top of `cortex-m-rt` and provides its own method of defining
+the entrypoint and bootloader.
 
-![Counter](images/counter.svg)
+```rust
+use embassy_executor::Spawner;
 
-The way the counter works here is that it increments/decrements every clock cycle and checks whether or not it has reached its reset value. If is has, then it resets to its initial value and starts all over again.
+#[embassy_executor::main]
+async fn main(_spawner: Spawner) {
+    let peripherals = embassy_rp::init(Default::default());
+}
+```
 
-
-#### SysTick
-
-The ARM Cortex-M uses the SysTick time counter to keep track of time. This counter is decremented every microsecond, and when it reaches 0, it triggers an exception and then resets.
-
-- `SYST_CVR` register - the value of the timer itself
-- `SYST_RVR` register - the reset value
-- `SYST_CSR_SET` register:
-	- `ENABLE` field - enable/disable the counter
-	- `TICKINT` field - enable/disable exception on reaching 0
-
-### Timers
-
-Until now, we have been able to blink a led at a certain time interval, by busy waiting a while between each led toggle. The technique we used so far was asking the processor to skip a clock cycle a number of times, or by calling the processor instruction `nop` (no operation) in a loop. 
-:::info
-This method is not ideal, since the `nop` instruction stalls the processor and wastes valuable time that could otherwise be used to do other things in the meantime. To optimize this, we can use *alarms*.
-:::
-An **alarm** is a counter that triggers an interrupt every time it reaches a certain value. This way, an alarm can be set to trigger after a specific interval of time, and while it's waiting, the main program can continue executing instructions, and so it is not blocked. When the alarm reaches the chosen value, it goes off and triggers an interrupt that can then be handled in its specific ISR.
-
-![Alarm](images/alarm.svg)
-
-:::info
-The RP2040 timer is fully monotomic, meaning it can never truly overflow. Its value is stored on 64 bits and increments every 1 microsecond, which means that the last value it can increment to before overflowing is 2<sup>64-1</sup>, which the equivalent of roughly 500,000 years. This timer allows 4 different alarms, which can be used independently (`TIMER_IRQ_0/1/2/3`).
-:::
-
-## Analog and Digital Signals
-
-**Analog signals** are a representation of real-world data. They communicate information in a continuous function of time. They are smooth and time-varying waves, and contain an infinite number of values within the continuous range. An example of an analog signal would be sound, or the human voice.
-
-![AnalogSignal](images/analog_signal.png)
-
-**Digital signals** are a discrete representation of data. They are represented by a sequence of binary values, taken from a finite set of possible numbers. They are square and discrete waves. In most cases, they are represented by two values: 0 and 1 (or 0V and 5V). Digital representation of signals is usually used in hardware.
-
-![DigitalSignal](images/digital_signal.png)
-
-## Pulse-Width Modulation (PWM)
-Up to now, we learned to turn a led on and off, or in other words, set a led's intensity to 100% or 0%. What if we wanted to turn on the led only at 50% intensity? We only have a two-level digital value, 0 or 1, so technically a value of 0.5 is not possible. What we can do is simulate this analog signal, so that it *looks* like the led is at half intensity. 
-
-**Pulse-Width Modulation** is a method of simulating an analog signal using a digital one, by varying the width of the generated square wave. 
-
-![PWMExample](images/pulse-width-modulation-signal-diagrams-average.png)
+The `embassy_rp::init` function takes care of the peripheral initialization so that developers can jump
+right in and use them.
 
 :::note
-We can think of the simulated analog signal being directly proportional to the change in digital signal pulse size. The larger the square wave at a given period T, the higher the average analog amplitude output for that period.
+
+Embassy-rs is designed to work in an asynchronous way and this is why the `main` function is defined as `async`. For the time being, just take it as a must and ignore it.
+
 :::
 
-The **duty cycle** of the signal is the percentage of time per period that the signal is high.
+### Configure GPIO Output
 
-![DutyCycle](images/duty_cycle.png)
+Embassy-rs provides one single function that returns the GPIO `Output` pin and hides the configuration
+details from developers.
 
-So if we wanted our led to be at 50% intensity, we would choose a duty cycle of 50%. By quickly switching between high and low, the led appears to the human eye as being at only 50% intensity, when in reality, it's only on at max intensity 50% of the time, and off the rest of the time.
-
-![PWMLed](images/pwm_led.gif)
-
-$$
-
-duty\_cycle = \frac{time\_on}{period} \%
-
-$$
-
-For the RP2040, to generate this PWM signal, a *counter* is used. The PWM counter is controlled by these registers (`X` can be from 0-7, depending on the channel):
-
-- `CHX_CTR` - the actual value of the counter
-- `CHX_CC` - the value that the counter will compare to
-- `CHX_TOP` - the value at which the counter will reset (or *wrap*)
-
-When `CHX_CTR` is reset, the value of the output signal is 1. The counter counts up until it reaches `CHX_CC`, after which the value of the output signal becomes 0. The counter continues to count until it reaches `CHX_TOP`, and then the signal becomes 1 again. This way, by choosing the value of `CHX_CC`, we set the duty cycle of the PWM signal.
-
-![PWMRP2040](images/pwm_rp2040_example.png)
-
-On RP2040, all GPIO pins support PWM. Every two pins share a PWM slice, and each one of them is on a separate channel. 
-
-![RP2040PWMPins](images/pwm_rp2040_pins.png)
-
-:::info
-This means that in order to use a pin as PWM, we need to know what channel it's on, and which output it uses (A or B).
-:::
-
-### Examples of hardware controlled through PWM
-
-- leds
-- motors
-- buzzers
-- RGB leds (what we will be using for this lab)
-
-An **RGB** LED is a led that can emit any color, using a combination of red, green and blue light. On the inside, it's actually made up of 3 separate leds:
-- *R* led - to control the intensity of the *red* light
-- *G* led - to control the intensity of the *green* light
-- *B* led - to control the intensity of the *blue* light
-
-By using PWM on the R, G and B leds, we can control each of their intensity to represent any color.
-
-:::info
-For example, if we wanted to create the color purple, we would set the intensity of red and blue to 100%, and the intensity of green to 0%.
-:::
-
-There are two different types of RGB LEDs:
-
-- common cathode: all LED cathodes are connected together. A LOW signal means off, and a HIGH signal means on at max intensity.
-- common anode: all LED anodes are connected together. A LOW signal means on at max intensity, and a HIGH signal means off.
-
-![CommonAnodeCommonCathode](images/common_anode_common_cathode.png)
-
-:::warning
-For this lab, we will be using **common anode** RGB LEDs, which means that the PWM signal should be *opposite*. 0 will be 100% intensity, and 1 will be 0% intensity.
-:::
-
-#### How to wire an RGB LED
-
-For **common cathode** RGB LEDs, we must tie each of the 3 color led legs to GPIO pins in series with a *resistance*, and connect the fourth pin to **GND**. 
-
-For **common anode** RGB LEDs, we must also tie each of the 3 color led legs to GPIO pins in series with a *resistance*, but connect the fourth pin to **3V3** instead. 
-
-:::danger
-Do not forget to tie a resistance to each color pin of the RGB LED!
-:::
-
-### PWM in Embassy-rs
-
-First, we need a reference to all peripherals, as usual. 
+The `pin` variable implements the embadded HAL [`OutputPin`](https://docs.rs/embedded-hal/latest/embedded_hal/digital/trait.OutputPin.html) trait.
 
 ```rust
-// Initialize peripherals
-let peripherals = embassy_rp::init(Default::default());
+use gpio::{Level, Output};
+
+// initialize PIN_n (replace n with a number) and set its
+// default value to LOW (0)
+let mut pin = Output::new(peripherals.PIN_n, Level::Low);
+
+// set the pin value to HIGH (1)
+pin.set_high();
+
+// set the pin value to LOW (0)
+pin.set_low();
 ```
 
-In order to modify the PWM counter configurations, we need to create a `Config` for our PWM.
+:::tip
 
-```rust
-use embassy_rp::pwm::Config as ConfigPwm; // PWM config
+While the device initialization is specific to every hardware device (the example uses the 
+`embassy_rp` crate that is for RP2040), the pin initialization and usage is portable. It
+uses the same code, regardless of the MCU used.
 
-// Create config for PWM slice
-let mut config: ConfigPwm = Default::default();
-// Set top value (value at which PWM counter will reset)
-config.top = 0x8000; // in HEX, equals 32768 in decimal
-// Set compare value (counter value at which the PWM signal will change from 1 to 0)
-config.compare_a = config.top / 2;
-```
-
-In the example above:
-    - `top` is the field from `Config` that will define the value at which the counter will reset back to 0
-    - `compare_a` is the field from `Config` that will define the value at which the PWM signal will switch from 1 to 0
-In this case, `config.compare_a` is half of `config.top`. This means that the duty cycle of the generated PWM signal will be 50%, or, in other words, that the PWM signal will switch from 1 to 0 halfway through each period.
-
-To select the pin that we want to use for PWM, we need to create a new PWM driver that uses the correct channel and output for our pin.
-
-```rust
-// Create PWM driver for pin 0
-let mut pwm = Pwm::new_output_a( // output A
-    peripherals.PWM_CH0, // channel 0
-    peripherals.PIN_0, // pin 0
-    config.clone()
-);
-```
-
-:::warning
-1. The code above is an example for pin 0. You need to modify the channel, output and pin depending on the PWM pin you choose to use!
-2. The value of `compare_a` or `compare_b` must be changed depending on the desired duty cycle!
 :::
 
-If we decide to modify the value of `compare_a` or `compare_b`, we have to update the configuration for the PWM.
+### Configure GPIO Input
+
+Using a pin as input is very similar to using it as output.
 
 ```rust
-config.compare_a += 100; // modified value of `compare_a`
-pwm.set_config(&config); // set the new configuration for PWM
+use gpio::{Input, Pull};
+
+let pin = Input::new(peripherals.PIN_n, Pull::Up);
+
+if pin.is_high() {
+    // Do something if the pin value is HIGH (1)
+} else {
+    // Do something if the pin value if LOW (0)
+}
 ```
 
-## Analog-to-Digital Converter (ADC)
+:::warning 
 
-Now we know how to represent an analog signal using digital signals. There are plenty of cases in which we need to know how to transform an analog signal into a digital one, for example a temperature reading, or the voice of a person. This means that we need to correctly represent a continuous wave of infinite values to a discrete wave of a finite set of values.
-For this, we need to sample the analog signal periodically, in other words to measure the analog signal at a fixed interval of time. This is done by using an **Analog-to-Digital converter**.
+For a correct use of the buttons, use pull-up, pull-down resistors depending on the mode of operation of the button. Check [01 - Hardware Introduction](https://embedded-rust-101.wyliodrin.com/docs/lab/01#buttons)
 
-The ADC has two important parameters that define the quality of the signal representation:
-
-| Parameter | Description | Impact on quality |
-|-----------|-------------|-------------------|
-| Sampling Rate | Frequency at which a new sample is read | The higher the sampling rate, the more samples we get, so the more accurate the representation of the signal |
-| Resolution | Number of bits which we can use in order to store the value of the sample | The higher the resolution, the more values we can store, so the more accurate the representation |
-
-:::info
-For example, a resolution of 8 bits means that we can approximate the analog signal to a value from 0 to 255.
 :::
 
-![ADCSampling](images/sampling_values.svg)
+### Waiting
 
-### Nyquist-Shannon Sampling Theorem
-
-The [Nyquist-Shannon sampling theorem](https://en.wikipedia.org/wiki/Nyquist%E2%80%93Shannon_sampling_theorem) serves as a bridge between continuous-time signals and discrete-time signals. It establishes a link between the frequency range of a signal and the sample rate required to avoid a type of distortion called *aliasing*. Aliasing occurs when a signal is not sampled fast enough to construct an accurate waveform representation.
-
-For an analog signal to be represented without loss of information, the conversion needs to satisfy the following formula:
-
-$$
-sampling_f >= 2 \times max_{f}
-$$
-
-The analog signal needs to be sampled at a frequency greater than twice the *maximum frequency* of the signal.
-In other words, we must sample at least twice per cycle.
-
-![NyquistTheorem](images/nyquist_theorem.png)
-
-
-### Examples of analog sensors
-
-- temperature sensor
-- potentiometer
-- photoresistor (what we will be using for this lab)
-
-A **photoresistor** (or photocell) is a sensor that measures the intensity of light around it. Its internal resistance varies depending on the light hitting its surface; therefore, the more light there is, the lower the resistance will be. 
-
-![Photoresistor](images/photoresistor.png)
-
-#### How to wire a photoresistor
-
-To wire a photoresistor, we need to connect one leg to *GND* and the other leg to a voltage divider. Take a look at the [Electronics](/tutorial/electronics/index.md#voltage-divider) tutorial:
-$$
-V_{out} = V_{in} * \frac{R_{2}}{R_{1} + R_{2}};
-$$
-
-In our case:
-- $ V_{out} $ will be the voltage at the ADC pin on the MCU
-- $ V_{in} $ will be the voltage at the from the GPIO pin the photoresistor is tied to
-- $ R_{1} $ is the variable resistance of the photoresistor
-- $ R_{2} $ is a resistance compatible with our photoresistor (in our case, 10k $\Omega$)
-
-This way, the ADC pin measures the photoresistor's resistance, without the risk of a short-circuit.
-
-![PhotoresistorWiring](images/photoresistor_wiring.png)
-
-### ADC in Embassy-rs
-
-On the RP2040, ADC uses an interrupt called `ADC_IRQ_FIFO` to signal whenever a new sample has been added to the ADCs' FIFO. This new sample will be stored inside a FIFO. In the Embassy library, this interrupt is already implemented, so all we need to do is bind it and use it in our ADC variable.
+Embassy-rs provides support for suspending the execution of the software for an amount of time. It uses
+the [`Timer`](https://docs.rs/embassy-time/0.3.0/embassy_time/struct.Timer.html) structure from the
+[`embassy_time`](https://docs.rs/embassy-time/latest/embassy_time/) crate.
 
 ```rust
-// Bind the `ADC_IRQ_FIFO` interrupt to the Embassy's ADC handler
-bind_interrupts!(struct Irqs {
-    ADC_IRQ_FIFO => InterruptHandler;
-});
+// suspend the execution for a period of time
+use embassy_time::Timer;
 
-// ---- fn main() ----
+Timer::after_secs(1).await;
+```
 
-// Initialize peripherals
-let peripherals = embassy_rp::init(Default::default());
+:::tip
 
-// Create ADC driver
-let mut adc = Adc::new(peripherals.ADC, Irqs, Config::default());
+If the MCU provides timers, the Embassy framework will use them to suspend the software. This is very efficient.
+
+:::
+
+## Platform Access Crate (PAC)
+
+A mid level way of developing in Rust for MCUs are the *platform access crates* 
+(PAC). These crates are automatically generated from the *System View Description* (SVD) files.
+
+Using [rust2svd](https://docs.rs/svd2rust/latest/svd2rust/), developers can automatically generate
+a crate that provides access functions to the MCUs registers. This provides a significant improvement,
+as developers do not have to write manually the register addresses.
+
+One of the PAC crates for the RP2040 MCU is [rp2040-pac](https://docs.rs/rp2040-pac/latest/rp2040_pac/).
+
+:::note
+
+The PAC crate does not provide any means of initializing the MCU, so the entry point is still
+defined by the `cortex-m-rt` crate, just as it is for bare metal. Bare metal will be discussed later in the lab.
+
+Similarly, the PAC crate does not provide any `sleep` function.
+
+This section presents only the differences between bare metal and PAC. The PAC mode of writing 
+embedded software is very similar to bare metal, just that register access is made easier.
+
+:::
+
+The RP2040 (ARM Cortex-M0+) MCU uses *Memory Mapped Input Output* (MMIO). This means that the peripheral's registers
+are mapped into the address space (in normal words, in the memory). Reading and writing data from and to these registers
+is done by memory reads and writes.
+
+Blinking an LED in PAC or bare metal programming means following these steps:
+
+ 1. Ask the rust compiler not to use the `std` library, as it depends on the operating system
+ 2. Write a `main` function and instruct the MCU to call it at startup (reset)
+ 3. Configure the Single Cycle IO (SIO) peripheral to set a pin as output
+ 4. Enable the *IO Bank0* peripheral of the RP2040
+ 5. Configure the *IO Bank0* peripheral so that it sets a certain pin as output
+ 6. Toggle the pin's value through the *SIO*'s registers
+ 7. Wait for an amount of time
+ 8. Loop through steps 6 and 7
+
+### no-std
+
+As the code written runs on an MCU without any framework or operating system,
+the Rust compiler cannot rely on the `std` library. The two macros directives
+ask the compiler not to link the `std` library and not to expect `main`
+function.
+
+```rust
+#![no_main]
+#![no_std]
 ```
 
 :::warning
-If we are using PWM and ADC in the same code, we will have two different `Config` imports with the same name. In order to avoid compilation errors, we need to separate the PWM config import from the ADC one. To do this, we can import the two `Config`s with different names.
 
-```rust
-use embassy_rp::adc::Config as ConfigAdc; // ADC config
+The bare metal code has to start with these two directives.
 
-// ---- fn main() ----
-let mut adc = Adc::new(peripherals.ADC, Irqs, ConfigAdc::default());
-```
 :::
 
-Now, we need to initialize the ADC pin we will be using. The Raspberry Pi Pico has 3 pins that support ADC: `ADC0`, `ADC1`, and `ADC2`.
+### Bootloader
+
+The RP2040 has a piece of software written in an internal ROM memory that is loaded 
+when the MCU boots. This looks at the first 256 bytes of the Flash memory
+to understand how it needs to start the MCU.
+
+:::tip
+
+While the ROM bootloader is rather small, its functionality is very similar to the PC's BIOS
+boot sequence.
+
+:::
+
+The RP2040's datasheet explains the boot process. This is not very straight forward, and writing this
+information requires a digital signature. The `rp2040-boot` crate provides the bootloader information
+for booting with the `cortex-m-rt` crate.
+
+Adding the following code to the Rust includes the bootloader.
 
 ```rust
-// Initialize ADC pin
-let mut adc_pin = Channel::new_pin(peripherals.PIN_X, Pull::None); // where X should be replaced with a pin number
+#[link_section = ".boot_loader"]
+#[used]
+pub static BOOT_LOADER: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 ```
 
-Once we have the ADC and pin set up, we can start reading values from the pin. 
+### Entry
+
+For this lab, we will use the `cortex-m-rt` crate. As the starting code for an MCU is usually processor
+and vendor dependent, this crate allows developers to get started a little faster. It implements the bare minimum
+initialization code and provides a macro called `entry` that developers can use to select the startup (main)
+function.
+
+:::info
+
+The `entry` macro is used by Embassy through the `embassy_executor::main` macro that sets the `main` function as the startup point and defines the correct bootloader.
+
+:::
+
+When an error occurs, Rust calls the `panic` function. When using the `std` library, the `panic` function is
+already defined. It prints the error and usually unwinds the stack. When using `core`, it is the developer's
+job to define a `panic` function. In the case of bare metal development, the simplest `panic` function is 
+one that loops indefinitely, preventing the MCU form executing code.
 
 ```rust
-let level = adc.read(&mut adc_pin).await.unwrap(); // read a value from the pin
-info!("Light sensor reading: {}", level); // print the value over serial
-Timer::after_secs(1).await; // wait a bit before reading and printing another value
+use core::panic::PanicInfo;
+
+use cortex_m_rt::entry;
+
+// the `entry` macro sets up this function
+// as the function that the MCU calls at
+// startup
+#[entry]
+fn main() -> ! {
+    // the `main` function is not allows to return
+    loop { }
+}
+
+// rust uses panics when an error occurs
+// as this is bare metal, we have to define
+// the panic function that rust calls
+#[panic_handler]
+fn panic(_info: &PanicInfo) -> ! {
+    // if an error occurs, we simply loop around
+    // to prevent the MCU from executing 
+    // anything
+    loop {}
+}
 ```
+
+:::warning
+
+In PAC or bare metal mode, the MCU does not run any framework or operating system, it just runs the developers bare metal code. This is why `main` function is not allowed to return, it loops forever. There is no system to which the function
+could return control.
+
+:::
+
+One of the first lines of the `main` function is getting a reference to all the
+peripherals.
+
+```rust
+use rp2040_pac::Peripherals;
+
+#[entry]
+fn main() -> ! {
+    // get a reference to all the peripherals
+    let peripherals = Peripherals::take().unwrap();
+
+    loop { }
+}
+```
+
+:::info
+
+In Embassy, the `main` function does not have to loop indefinitely, it is allowed to return, as it runs within the embassy-rs framework.
+
+:::
+
+### Configuring the SIO
+
+In bare metal and PAC modes, developers have to manually initialize the *IO Bank0* and *SIO* peripherals.
+
+The GPIO pins are configured using the MCU's SIO registers. Each pin is configured by setting or clearing the corresponding
+bit of several registers. Below is a table with the memory addresses of the SIO registers. 
+
+The PAC crate provides the `SIO` peripheral, which in turn provides a function for
+each one of its registers. It fully hides the actual address of the registers.
+
+<div align="center">
+![SIO Registers](images/sio_registers.png)
+</div>
+
+```rust
+let sio = peripherals.SIO;
+
+// set the `pin` pin as output
+sio.gpio_oe_set().write(|w| unsafe { w.bits(1 << pin) });
+
+// set the `pin` to value `0`
+sio.gpio_out_clr().write(|w| unsafe { w.bits(1 << pin) })
+
+// set the `pin` to value `1`
+sio.gpio_out_set().write(|w| unsafe { w.bits(1 << pin) })
+```
+
+### Configuring the IO Bank0
+
+GPIO pins can be configured for several functionalities, they can be used as GPIO pins or can also be used by certain peripherals, usually those that implement communication protocols. The RP2040's *IO Bank0* peripherals performs this multiplexing.
+
+The following table provides all the functions that each pin can have.
+
+<div align="center">
+![Pin Functions](images/pin_functions.png)
+</div>
+
+#### Enable the IO Bank0
+
+When the RP2040 starts, the *IO Bank0* peripheral is disabled. To enable it, developers have to
+use the *Reset*'s peripheral `RESET`  register.
+
+<div align="center">
+![Reset Registers](images/reset_registers.png)
+</div>
+
+The fields of the `RESET` register. To enable *IO Bank0*, developers have to write
+a `0` in the `IO_BANK0` fields. By default, this field has the value `1`, which means that
+`*IO Bank0* is disabled.
+
+<div align="center">
+![Reset Register](images/reset_reset.png)
+</div>
+
+To verify that the *IO Bank0* peripheral has been enabled, developers have to check the field
+`IO_BANK0` of the `RESET_DONE` register shown in the table bellow.
+
+<div align="center">
+![Reset Done Register](images/reset_reset_done.png)
+</div>
+
+:::warning
+
+Developers might choose not to wait until the peripheral is enabled, but any writes to the peripheral's
+registers will most probably be ignored.
+
+:::
+
+```rust
+let reset = peripherals.RESETS;
+
+reset
+    .reset()
+    .modify(|r, w| unsafe { w.bits(r.bits() & !(1 << 5)) });
+while reset.reset_done().read().bits() & (1 << 5) == 0 {}
+```
+
+#### Configure the GPIO
+
+To connect the *SIO* peripheral to the output pins, developers have to modify the `GPIOx_CTRL` register.
+
+The following table shows the fields of the `GPIOx_CTRL` register. The fields that is of interest is `FUNCSEL`.
+Depending on the value written there, the *IO Bank0* will select a function or another. For this example,
+we have to write value `5`.
+
+<div align="center">
+![MCU Pins](images/gpio_ctrl_register.png)
+</div>
+
+```rust
+let io_bank0 = peripherals.IO_BANK0;
+
+// write the value 5 to the FUNCSEL field
+// Note: This actually writes the value 5 in FUNCSEL
+//       and 0s in all the other field. While this
+//       is fine for this example, usually a
+//       read, modify, write sequence should be used
+io_bank0
+    .gpio(pin)
+    .gpio_ctrl()
+    .write(|w| unsafe { w.bits(5) });
+
+// the correct way of doing this
+io_bank0
+    .gpio(pin)
+    .gpio_ctrl()
+    // the PAC crate provides fucntions for all the 
+    // register's fields
+    .modify(|_, w| unsafe { w.funcsel().bits(5) });
+```
+
+### Configuring the Pad
+
+The Pad peripheral is responsible for the electrical setup of the pins. It can configure the
+the maximum output current, input pull up or pull down resistor.
+
+The following table shows the *Pads* peripheral registers. Each GPIO pin has a corresponding register.
+
+<div align="center">
+![Pad Registers](images/gpio_pad_registers.png)
+</div>
+
+The following tables describe the `GPIOx` register. This register allows the configuration of several
+electrical parameters.
+
+<div align="center">
+![Pad Pad Control 2](images/gpio_pad_ctrl_2.png)
+</div>
+
+<div align="center">
+![Pad Pad Control 1](images/gpio_pad_ctrl_1.png)
+</div>
+
+Looking at the default values, when the MCU starts, pins are configured:
+
+| | |
+|-|-|
+| Output Enabled | Yes |
+| Input Enabled | Yes |
+| Maximum Output Current | 4mA |
+| Pull Input Resistor | Pull Down |
+| Schmidt Trigger | Yes |
+| Slew Rate | Slow |
+
+For this lab, the default values are fine, this peripheral can be considered as being properly setup.
+
+### Wait for an amount of time
+
+When using an operating system, developers usually have a function called `sleep` which asks the operating system
+to suspend the process for a certain amount of time. In bare metal environment, with no framework or operating system,
+this is not available. The MCU timers can be used for this, but the simplest (and most inefficient) of waiting is to
+loop around while doing nothing. The Arm Cortex-M processors offer the `nop` instruction. This asks the processor
+to do nothing.
+
+```rust
+// loops around 50000 times asking the processor
+// to execute the `nop` instruction that does
+// nothing
+for _ in 0..50000 {
+    // without this `asm` here, the compiler would optimize out the loop
+    asm!("nop");
+}
+```
+
+:::warning
+
+The `asm("nop")` is necessary, as otherwise the compiler optimizes out the empty loop.
+
+:::
+
+The question is how fast does this execute. The RP2040 starts by default using an internal 12MHz clock.
+
+$$
+t_{nop} = \frac{1}{12.000.000}s = 0.83ns
+$$
+
+The `loop` itself and the range (`0..50000`) calculation take another 4 - 5 MCU cycles. The actual wait time
+of the example is:
+
+$$
+t_{wait} = 5 * 50000 * \frac{1}{12.000.000}s = 20.83\mu s
+$$
+
+:::info
+
+This approach is inefficient compared to the method used in Embassy.
+
+:::
+
+## Bare metal
+
+When using bare metal, developers interact directly with the hardware devices. They are responsible for all the
+drivers and other components that they want to use. Mostly, bare metal development means *reading* and *writing* data
+from and to the MCUs and peripheral registers.
+
+### Configuring the SIO
+
+The *SIO* peripheral has a base address, the address where its registers are mapped in the address space.
+
+Each register has an offset, that represents the registers position (offset) relative to the *SIO*'s base address. 
+
+:::tip
+
+Computing the actual address of a register means adding the base address of the peripheral with the register's offset.
+
+e.g: `GPIO_OE`'s address is `0xd000_0000 + 0x020` => `0xd000_0020`
+
+:::
+
+<div align="center">
+![SIO Registers](images/sio_registers.png)
+</div>
+
+```rust
+use core::ptr::write_volatile;
+
+const GPIO_OE_SET: *mut u32 = 0xd000_0024 as *mut u32;
+const GPIO_OUT_SET: *mut u32 = 0xd000_0014 as *mut u32;
+const GPIO_OUT_CLR: *mut u32 = 0xd000_0018 as *mut u32;
+
+// set the `pin` pin as output
+unsafe { write_volatile(GPIO_OE_SET, 1 << pin); }
+
+// set the `pin` to value `0`
+unsafe { write_volatile(GPIO_OUT_CLR, 1 << pin); }
+
+// set the `pin` to value `1`
+unsafe { write_volatile(GPIO_OUT_SET, 1 << pin); }
+```
+
+:::info 
+
+For a better understanding, please read subchapters 2.3.1.2 and 2.3.1.7 of the [datasheet](https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf).
+
+:::
+
+#### Enable the IO Bank
+
+```rust
+const RESET: u32 = 0x4000_c000;
+const CLR: u32 = 0x3000;
+
+const RESET_DONE: u32 = 0x4000_c008;
+
+unsafe {
+    // clear bit `5` of the `RESET` register by
+    // writing `1` on  bit `5` at address
+    // `RESET` + 0x3000
+    write_volatile((RESET + CLR) as *mut u32, 1 << 5);
+
+    // wait for the IO Bank0 to enable
+    while read_volatile(RESET_DONE as *const u32) & (1 << 5) == 0 {}
+}
+```
+
+:::tip
+
+There is an interesting trick that the code above is using. Normally, the code modifies only the
+bit 5 of the `RESET` register. To perform that, it should:
+1. read the register
+2. modify the value read
+3. write back the modified value
+
+The RP2040 MCU provides a trick that allows the instant modification. For each peripheral mapped at
+address A, the MCU's Bus maps three other *shadow* peripherals: 
+
+| Name | Address | Behavior |
+|------|---------|----------|
+| *Peripheral_XOR* | A+0x1000 | `REGISTER` = `REGISTER` ^ value (XORs the new value with the original register value) | 
+| *Peripheral_SET* | A+0x2000 | `REGISTER` = `REGISTER` \| value (sets all the `1` bits of value in the original register) |
+| *Peripheral_CLR* | A+0x3000 | `REGISTER` = `REGISTER` & !value (for every `1` bit in the value, clears the corresponding bit in the original register) |
+:::
+
+#### Configure the GPIO
+
+To connect the *SIO* peripheral to the output pins, developers have to modify the `GPIOx_CTRL` register.
+
+Each GPIO pin has its own control register, located at offset $40014000h + 4 + 8 * pin$.
+
+<div align="center">
+![MCU Pins](images/gpio_status_ctrl.png)
+</div>
+
+:::tip
+
+For example, `GPIO25_CTRL`'s address is `0x40014000 + 4 + 8 * 25` = `0x400140CC`.
+.
+
+Pin 25 is connected to the onboard LED of the Raspberry Pi Pico.
+
+:::
+
+The following table shows the fields of the `GPIOx_CTRL` register. The fields that is of interest is `FUNCSEL`.
+Depending on the value written there, the *IO Bank0* will select a function or another. For this example,
+we have to write value `5`.
+
+<div align="center">
+![MCU Pins](images/gpio_ctrl_register.png)
+</div>
+
+```rust
+const GPIOX_CTRL: u32 = 0x4001_4004;
+
+// compute the address of the GPIOx_CTRL register
+let gpio_ctrl = (GPIOX_CTRL + 8 * LED) as *mut u32;
+
+// write the value 5 to the FUNCSEL field
+// Note: This actually writes the value 5 in FUNCSEL
+//       and 0s in all the other field. While this
+//       is fine for this example, usually a
+//       read, modify, write sequence should be used
+unsafe { write_volatile(gpio_ctrl, 5); }
+```
+
+:::info 
+
+For a better understanding, please read subchapters 1.4.3, 2.1.12, 2.14, 2.19.1, 2.19.2, 2.19.15, 2.19.16 of the [datasheet](https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf).
+
+:::
+
+## Build and flash
+
+### Build
+
+To build a program for the Raspberry Pi Pico, run the following command in the crate's root folder (where the `Cargo.toml` file and `src` folder are):
+
+```shell
+cargo build
+```
+
+
+This will create the binary file inside `target/thumbv6m-none-eabi/debug/`.
+
+:::note
+
+If the crate is part of a workspace (as it is the lab template), the `target` folder is located in the workspace's root instead of the crate's root. 
+
+:::
+
+### Flash
+
+To load your program to the Raspberry Pi Pico, connect the board through USB to your computer while holding down the `BOOTSEL` button. It should appear as an external drive on your system. Afterwards, you can run the following command (also from the crate's root folder):
+
+```shell
+elf2uf2-rs -d target/thumbv6m-none-eabi/debug/<crate_name>
+```
+
+This will upload your program to the Pico.
+
+:::note
+
+If you are running this command from within a crate inside of a workspace, don't forget to navigate to the target folder by using `../../`
+Example:
+```shell
+elf2uf2-rs -d ../../target/thumbv6m-none-eabi/debug/<crate_name>
+```
+
+:::
+
+:::note
+
+If the above command doesn't work, try these steps instead:
+
+- run this command: 
+```shell
+elf2uf2-rs target/thumbv6m-none-eabi/debug/<crate_name>
+```
+
+- drag and drop the `.uf2` file located in the `target/thumbv6m-none-eabi/debug/` folder to the RP external drive
+
+:::
+
+### Serial console
+
+To see messages from the Pico over the serial port, add the `-s` argument to the flash command:
+
+```shell
+elf2uf2-rs -s -d /target/thumbv6m-none-eabi/debug/<crate_name>
+```
+
+This will allow us to see messages sent over serial from the board.
+
+### Troubleshooting
+
+#### Link error - reset vector is missing
+
+In case you get an error similar to this:
+
+<div align="center">
+![Reset Vectors Missing](images/reset_vector_missing_error.png)
+</div>
+
+That means that you most probably forgot to add the *entry point* to your program. Make sure you add `#[entry]` before your main function so that the MCU knows to call it at startup.
+
+#### Flash succeeds, the application does not start
+
+In case your code doesn't seem to get uploaded correctly or the board goes into `BOOTSEL` mode as soon as you plug it into your computer, it might be time to debug. To install required dependencies for debugging, run these commands:
+
+```shell
+rustup component add llvm-tools
+
+cargo install cargo-binutils
+```
+
+Now, you can run this command:
+
+```shell
+rust-objdump --section-headers target/thumbv6m-none-eabi/debug/<crate_name>
+```
+
+This will let us see the layout of the binary file, or the memory of the program that we are about to flash to the board.
+
+<div align="center">
+![Rust ObjDump](images/objdump.png)
+</div>
+
+We need to make sure that it contains the `.boot_loader` section, or else our program will never run.
+
+Further reading: [Embassy Tutorial](../tutorials/embassy)
 
 ## Exercises
 
-1. Connect an LED to pin GP2, a photo-resistor to ADC0 and an RGB LED to pins GP1, GP3, GP4. Use [KiCad](https://www.kicad.org/) to draw the schematics. (**1p**)
-2. Take a look at `lab04_ex2` in the lab skeleton. It is a working example of lighting an LED using PWM at 50% intensity. The LED in the example is connected to GP0.
-    - Modify the provided example to light the LED of *your circuit* to 25% intensity. (**1p**)
-    - Increase the LED's intensity by 10% every second, until it reaches max intensity, when it stops. (**1p**)
-3. Read the value of the photo-resistor and print it to the console. (**2p**)
+1. Use [KiCad](https://www.kicad.org/) to design a simple circuit that connects an LED to GPIO 0 (GP0). (**1p**)
 
-:::info
-To see the console with messages from the Pico, use the flash command with an extra `-s` parameter. 
-```bash
-elf2uf2-rs -s -d /target/thumbv6m-none-eabi/debug/<crate_name>
-```
+:::warning 
+
+The maximum current that GPIO pins output depends on the MCU. To be sure that the LED will work normally and there is no risk of destruction, a resistor has to be added to limit the current level *below* the maximum GPIO output current.
+
 :::
 
+2. Write a program using Embassy that set on HIGH the LED connected to GPIO pin 0 (GP0). (**2p**)
+
+:::danger 
+
+Please make sure the lab professor verifies your circuit before it is powered up.
+
+:::
+
+3. Write a program using Embassy that blinks the LED connected to GPIO pin 0 (GP0) every 300ms. (**2p**)
+
+:::note
+
+For the purpose of this lab, please use `await` as is, think that for using the `Timer`, you have to add `.await` after the `after` function.
+
+:::
+
+4. Write a program using `embassy-rs` that will write the message "The button was pressed" to the console every time button A is pressed. Take a look at the Pico Explorer Base's pinout to determine the pin to which button A is connected. (**2p**)
+
+<div align="center">
+![Pico Explorer Pinout](../images/explorer_pins.jpg)
+</div>
+
 :::info
-To be able to print messages to the console, we need to send messages over a simulated serial port to the computer. For this, we will use the USB driver provided by Embassy.
+
+The Raspberry Pi Pico does not have an integrated debugger, so writing messages to the console is done
+with a simulated serial port over the USB. This implies the usage of a USB driver.
 
 ```rust
 use embassy_rp::usb::{Driver, InterruptHandler};
@@ -383,70 +831,38 @@ async fn main(spawner: Spawner) {
 
     info!("message");
 }
-
 ```
-:::
 
 :::warning
-Notice that the USB driver also uses an `InterruptHandler` import that could be confused with the `InterruptHandler` used by ADC. Make sure to use different naming conventions for each one, as described in the warning [here](#adc-in-embassy-rs). 
-:::
-4. Depending on the value read from the photo-resistor, brighten or dim the led. The led should shine brighter when there is *less* light in the room. (**2p**)
-:::tip
-Use the serial console to debug your program!
-:::
-5. Make the RGB LED switch from red -> yellow -> blue every time the switch A is pressed. (**2p**)
-:::note
-The reason why we **can't** use GP1, GP2 and GP3 for the RGB LED, for example, is because GP2 and GP3 are both on PWM channel 1, therefore we can't independently control them with PWM.
-:::
-![Colors](images/colors.png)
 
-6. Using the `SysTick` interrupt in *bare metal*, make the led blink at a 100ms delay. (**1p**)
-:::tip
-Setting up the `SysTick` counter:
-```rust
-const SYST_RVR: *mut u32 = 0xe000_e014 as *mut u32;
-const SYST_CVR: *mut u32 = 0xe000_e018 as *mut u32;
-const SYST_CSR: *mut u32 = 0xe000_e010 as *mut u32;
-
-// fire systick every 5 seconds
-let interval: u32 = 5_000_000;
-unsafe {
-    write_volatile(SYST_RVR, interval);
-    write_volatile(SYST_CVR, 0);
-
-    // set fields `ENABLE` and `TICKINT`
-    write_volatile(SYST_CSR, 0b011);
-    // we need to write the whole register, single bit modifications is not possible with the SYST_CSR register
-}
-```
-Registering the `SysTick` handler:
-```rust
-#[exception]
-unsafe fn SysTick() { 
-    /* systick fired */ 
-}
-```
+Make sure you sleep while looping to read the button's value, otherwise 
+the USB driver's task will not be able to run and the messages will 
+not be printed.
 
 :::
 
-:::info
-To safely share a bool value globally to keep track of the LED status, we need to use an [`AtomicBool`](https://doc.rust-lang.org/std/sync/atomic/struct.AtomicBool.html). This requires less code than using a normal `bool` and a `Mutex`.
-
-Creating a new static `AtomicBool`:
-```rust
-// imports 
-use core::sync::atomic::{AtomicBool, Ordering};
-
-static atomic_bool: AtomicBool = AtomicBool::new(false);
-```
-
-Reading the value of an `AtomicBool`:
-```rust
-let atomic_bool_value = atomic_bool.load(Ordering::Relaxed);
-```
-
-Writing the value of an `AtomicBool`:
-```rust
-atomic_bool.store(true, Ordering::Relaxed);
-```
 :::
+
+5. Write a Rust program using `embassy-rs` that toggles the LED every time button A is pressed. (**1p**)
+
+6. Write a Rust program that sets on HIGH the LED connected to GPIO pin 0 (GP0). (**1p**)
+   1. use the `rp2040-pac` crate
+   2. use bare metal
+
+7. Write a Rust program that blinks the LED connected to GPIO pin 0 (GP0) every 300ms. (**1p**)
+   1. use the `rp2040-pac` crate - write a `PinDriver` that implements the [`OutputPin`](https://docs.rs/embedded-hal/latest/embedded_hal/digital/trait.OutputPin.html) trait
+   2. use bare metal - write a `PinDriver` that implements the [`OutputPin`](https://docs.rs/embedded-hal/latest/embedded_hal/digital/trait.OutputPin.html) trait
+
+## Advanced topics
+
+### Debouncing techniques for stable input reading.
+
+Noise is produced whenever a pushbutton or other switch is moved. Because the switch contact is made of metal and has some elasticity, there is some noise (contact). The switch literally bounces a few times once it makes contact with a metal surface when it is shifted into a new position. This contact is known as bounce. 
+
+<div align="center">
+![Button Bounce](images/button-bounce.png)
+</div>
+
+The image above shows the signal produced by a button when pressed.
+
+The most correct way to correct the bouncing problem is the hardware one, but there are also software methods to correct the problem. For more details and examples, consult the documentation from Embassy-rs and the examples provided by them.
