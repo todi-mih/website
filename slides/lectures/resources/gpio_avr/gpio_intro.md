@@ -11,7 +11,7 @@ layout: two-cols
 
 # Why GPIO can be complex
 
-### This is a minimalistic representation of a typical GPIO ping
+### This is a minimalistic representation of a typical GPIO pin
 
 <br>
 
