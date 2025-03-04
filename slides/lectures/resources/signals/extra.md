@@ -43,7 +43,7 @@ layout: two-cols
 # VCC1 > VCC2
 
 
-### Might work, might produce magic smock
+### Might work, might produce magic smoke
 <div style="color: red;">
 
 $$ V_{OH\_transmiter} > VCC_{receiver} $$
