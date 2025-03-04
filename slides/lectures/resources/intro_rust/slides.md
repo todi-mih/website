@@ -45,7 +45,7 @@ layout: two-cols
 
 ### A few characteristics:
 
-- **Usage**: For values unknown at compile time that will not change once an initial value is set (for example- values that ar read from a config file at boot time);
+- **Usage**: For values unknown at compile time that will not change once an initial value is set (for example- values that are read from a config file at boot time);
 - **Immutable by Default**: Variables declared with let are immutable; 
 - **Runtime Known**: The value is determined at runtime, usually unknown at compile time; 
 - **Usual Location in Embedded**: Stored in SRAM (RAM) since it's allocated at runtime.
@@ -190,9 +190,9 @@ fn main() {
     let wifi_name_2 = &wifi_name_1;  
     // Borrows wifi_name_1 (immutable reference)
 
-    println!("{}", wifi_name_2); //compiler dropes the referance  
+    println!("{}", wifi_name_2); //compiler dropes the reference  
     println!("{}", wifi_name_1);  
-    // Both lines compiles & print expected value
+    // Both lines compile & print expected value
 }
 
 fn main() {
