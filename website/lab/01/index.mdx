@@ -867,17 +867,15 @@ use cortex_m_semihosting::hprintln;
 #[entry]
 fn main() -> ! {
     // Trigger a panic by dividing by zero (for demonstration purposes)
-    let result = divide_by_zero();
+    let result = divide(23, 0);
     hprintln!("Result: {}", result);
 
     loop {}
 }
 
-// Simulate a division by zero panic
-fn divide_by_zero() -> u32 {
-    let a = 1;
-    let b = 0;
-    a / b  // This will trigger a panic
+// Divide the two given numbers
+fn divide(a: u32, b: u32) -> u32 {
+    a / b
 }
 
 // Define the panic handler
