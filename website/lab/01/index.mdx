@@ -863,6 +863,7 @@ When using `#![no_std]`, developers have to define their own panic handler.
 
 use cortex_m_rt::entry;
 use cortex_m_semihosting::hprintln;
+use core::panic::PanicInfo;
 
 #[entry]
 fn main() -> ! {
@@ -974,6 +975,7 @@ use cortex_m_rt::entry;
 use defmt::{error, info};
 // use RTT for defmt transport
 use defmt_rtt as _;
+use core::panic::PanicInfo;
 
 #[entry]
 fn main() -> ! {
