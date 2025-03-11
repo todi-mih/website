@@ -535,9 +535,9 @@ flowchart LR
 
 8. Extend the traffic light to include a flashing blue LED for pedestrians.
  When the pedestrian button is pressed, the traffic light switches to yellow
- and waits one second. After that, it switches on the red light and flashed
+ and waits one second. After that, it switches on the red light and flashes
  the blue pedestrian light. After 5 seconds, the traffic light switches back
- to red and stops the blue flashing. (**2p**)
+ to green and stops the blue flashing. (**2p**)
 
 ```mermaid
 flowchart LR
@@ -567,7 +567,7 @@ flowchart LR
 ![International Morse Code](./images/international_morse_code.svg)
 
 :::note
-Letters in mores code are case insensitive. You can use the [`char::to_ascii_uppercase`](https://doc.rust-lang.org/beta/core/primitive.char.html#method.to_ascii_uppercase)
+Letters in Morse Code are case insensitive. You can use the [`char::to_ascii_uppercase`](https://doc.rust-lang.org/beta/core/primitive.char.html#method.to_ascii_uppercase)
  or [`u8::to_ascii_uppercase`](https://doc.rust-lang.org/std/primitive.u8.html#method.to_ascii_uppercase) functions to convert a `char` or `u8` to uppercase.
 :::
 
