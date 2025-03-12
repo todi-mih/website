@@ -83,7 +83,7 @@ Options:
 This tool is an embedded debugging and target interaction toolkit. It enables its user to program and debug microcontrollers via a debug probe.
 
 ```shell
-cargo install probe-rs --features cli --locked
+cargo install probe-rs-tools --locked
 ```
 
 If you are on **Linux** you will also need to add this [`udev`](https://probe.rs/files/69-probe-rs.rules) file in `/etc/udev/rules.d`. Then, run:
