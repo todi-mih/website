@@ -8,22 +8,23 @@ layout: section
 # Bibliography
 for this section
 
-**Raspberry Pi Ltd**, *[RP2040 Datasheet](https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf)*
-   - Chapter 2 - *System Description*
-     - Chapter 2.15 - *Clocks*
-       - Subchapter 2.15.1
-       - Subchapter 2.15.2
-   - Chapter 4 - *Peripherals*
-     - Chapter 4.6 - *Timer*
+**Raspberry Pi Ltd**, *[RP2350 Datasheet](https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf)*
+   - Chapter 8 - *Clocks*
+     - Chapter 8.1 - *Overview*
+       - Subchapter 8.1.1
+       - Subchapter 8.1.2
+   - Chapter 12 - *Peripherals*
+     - Chapter 12.8 - *System Timers*
 
 ---
 ---
 # Clocks
-all peripherals and the MCU use a clock to execute at certain intervals
 
 <div grid="~ cols-2 gap-5">
 
 <div>
+
+all peripherals and the MCU use a clock to execute at certain intervals
 
 | Source | Usage |
 |-|-|
@@ -38,7 +39,7 @@ let p = embassy_rp::init(Default::default());
 </div>
 
 <div align="center">
-<img src="./clocks.png" class="rounded w-140">
+<img src="./rp2350_clocks.png" class="rounded w-140">
 </div>
 
 </div>
@@ -49,7 +50,7 @@ let p = embassy_rp::init(Default::default());
 stabilizing the signal and adjusting it
 
 1. divides down the clock signals used for the timer, giving reduced overflow rates
-2. allows the timer to be clocked at a user desires the rate
+2. allows the timer to be clocked at a user desired rate
 
 <div align="center">
 <img src="./clock_pipeline.png" class="rounded w-140">
@@ -92,7 +93,7 @@ ARM Cortex-M time counter
 
 - decrements the value of `SYST_CVR` every μs
 - when `SYST_CVR` becomes `0`: 
-  - triggers the `SysTick` the exception
+  - triggers the `SysTick` exception
   - next clock cycle sets the value of `SYST_CVR` to `SYST_RVR`
 - `SYST_CALIB` is the value of `SYST_RVR` for a 10ms interval (might not be available)
 
@@ -118,7 +119,7 @@ ARM Cortex-M peripheral
 
 <img src="./systick_registers.png" class="rounded w-140">
 
-```rust{all|1,7,8|2,9|3,10,11}
+```rust{1,7,8|2,9|3,10,11|all}
 const SYST_RVR: *mut u32 = 0xe000_e014 as *mut u32;
 const SYST_CVR: *mut u32 = 0xe000_e018 as *mut u32;
 const SYST_CSR: *mut u32 = 0xe000_e010 as *mut u32;
@@ -147,7 +148,6 @@ unsafe fn SysTick() {
 }
 ```
 
-
 ---
 layout: two-cols
 ---
@@ -175,22 +175,23 @@ counter that triggers interrupts after a time interval
 
 ---
 
-# RP2040's Timer
+# RP2350's Timers
+two timers, `TIMER0` and `TIMER1`
 
 
 <div grid="~ cols-2 gap-5">
 
 <div>
 
-- stores a 64 bit number (`reset` is 2<sup>64-1</sup> )
-- starts with `0` at (the peripheral's) reset
-- increments the number every μs
+- store a 64 bit number (`reset` is 2<sup>64-1</sup> )
+- start with `0` at (the peripheral's) reset
+- increment the number every μs
 - in practice fully monotonic (cannot over flow)
-- allows 4 alarms that trigger interrupts
-  - `TIMER_IRQ_0`
-  - `TIMER_IRQ_1`
-  - `TIMER_IRQ_2`
-  - `TIMER_IRQ_3`
+- allow 4 alarms that trigger interrupts
+  - `TIMER0_IRQ_0` and `TIMER1_IRQ_0`
+  - `TIMER0_IRQ_1` and `TIMER1_IRQ_1`
+  - `TIMER0_IRQ_2` and `TIMER1_IRQ_2`
+  - `TIMER0_IRQ_3` and `TIMER1_IRQ_3`
 - `alarm_0` ... `alarm_3` registers are only 32 bits wide
 
 </div>
@@ -206,16 +207,14 @@ counter that triggers interrupts after a time interval
 layout: two-cols
 ---
 
-# RP2040's Timer
+# RP2350's Timer instance
 read the number of elapsed μs since reset
 
-<img src="./timer_registers_1.png" class="rounded w-100">
+#### Reading the time elapsed since restart
 
-### Reading the time elapsed since restart
-
-```rust{all|1,5|2,6|4,7,8}
-const TIMERLR: *const u32 = 0x4005_400c;
-const TIMERHR: *const u32 = 0x4005_4008;
+```rust{1,5|2,6|4,7,8|all}
+const TIMERLR: *const u32 = 0x400b_000c;
+const TIMERHR: *const u32 = 0x400b_0008;
 
 let time: u64 = unsafe {
     let low = read_volatile(TIMERLR);
@@ -229,9 +228,8 @@ The **reading order maters** as reading `TIMELR` latches the value in `TIMEHR` (
 :: right ::
 
 <div align="center">
-    <img src="./timer_registers_2.png" class="rounded w-100">
+    <img src="./rp2350_timer_registers_1.png" class="rounded w-100">
 </div>
-
 
 ---
 layout: two-cols
@@ -242,14 +240,14 @@ triggering an interrupt at an interval
 
 ```rust
 #[interrupt]
-unsafe fn TIMER_IRQ_0() { /* alarm fired */ }
+unsafe fn TIMER0_IRQ_0() { /* alarm fired */ }
 ```
 
-```rust{all|1,10|2,11,12|3,4,13}
-const TIMERLR: *const u32 = 0x4005_400c;
-const ALARM0: *mut u32 = 0x4005_4010;
+```rust{1,10|2,11,12|3,4,13|all}
+const TIMERLR: *const u32 = 0x400b_000c;
+const ALARM0: *mut u32 = 0x400b_0010;
 // + 0x2000 is bitwise set
-const INTE_SET: *mut u32 = 0x4005_4038 + 0x2000;
+const INTE_SET: *mut u32 = 0x400b_0040;
 
 // set an alarm after 3 seconds
 let us = 3_0000_0000;
@@ -268,5 +266,6 @@ unsafe {
 :: right ::
 
 <div align="center">
-    <img src="./timer_registers_2.png" class="rounded w-100">
+    <img src="./rp2350_timer_registers_alarm.png" class="rounded w-100">
+    <img src="./rp2350_timer_registers_2.png" class="rounded w-100">
 </div>
