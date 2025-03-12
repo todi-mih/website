@@ -42,6 +42,8 @@ Download the respective executable:
 
 :::note
 You may be prompted to install [Visual Studio C++ Build tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/). If so, follow the instructions from the previous link.
+
+Even if Visual Studio is already on your machine, `rustup` will not verify if the required components are present. If you experience issues with the `rustup` installation on Windows, please follow [these instructions](https://rust-lang.github.io/rustup/installation/windows-msvc.html#installing-only-the-required-components-optional) to manually add the missing components.
 :::
 
 The last step is to run `rustup --version` in terminal. If everything went well, you should see an output similar to this:
