@@ -42,6 +42,8 @@ Download the respective executable:
 
 :::note
 You may be prompted to install [Visual Studio C++ Build tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/). If so, follow the instructions from the previous link.
+
+Even if Visual Studio is already on your machine, `rustup` will not verify if the required components are present. If you experience issues with the `rustup` installation on Windows, please follow [these instructions](https://rust-lang.github.io/rustup/installation/windows-msvc.html#installing-only-the-required-components-optional) to manually add the missing components.
 :::
 
 The last step is to run `rustup --version` in terminal. If everything went well, you should see an output similar to this:
@@ -81,7 +83,7 @@ Options:
 This tool is an embedded debugging and target interaction toolkit. It enables its user to program and debug microcontrollers via a debug probe.
 
 ```shell
-cargo install probe-rs --features cli --locked
+cargo install probe-rs-tools --locked
 ```
 
 If you are on **Linux** you will also need to add this [`udev`](https://probe.rs/files/69-probe-rs.rules) file in `/etc/udev/rules.d`. Then, run:
