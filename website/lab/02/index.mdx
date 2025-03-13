@@ -457,6 +457,15 @@ Make sure you follow these steps:
 Please make sure you comment out (using `#` in from of the line) all the Embassy's crates 
 that you do not plan to use.
 
+:::warning
+Please make sure the `embassy_rp` crate is included in your build either:
+- by importing it with `use embassy_rp as _;`
+- or by initialising the peripherals
+
+This crate provides the `.start_block` section that is needed by the RP2350 to boot. Not including
+this crate will prevent this section from being added and will prevent the RP2350 to boot.
+:::
+
 :::info
 For sure, you will  not use USB and WiFi. This is a trial
 and error job, just comment out all the creates that you think you won't use and
