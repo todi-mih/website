@@ -84,11 +84,12 @@ This is how a Rust application would look like
 
 <div grid="~ cols-2 gap-4">
 
-```rust{all|1|2|4|6|7,11|10|13-16}
+```rust{all|1|2|4,5|7|8,12|11|14-17}
 #![no_std]
 #![no_main]
 
 use cortex_m_rt::entry;
+use core::panic::PanicInfo;
 
 #[entry]
 fn main() -> ! {
@@ -126,6 +127,7 @@ This is how a Rust application would look like
 
 use core::ptr::{read_volatile, write_volatile};
 use cortex_m_rt::entry;
+use core::panic::PanicInfo;
 
 const GPIOX_CTRL: u32 = 0x4001_4004;
 const GPIO_OE_SET: *mut u32= 0xd000_0024 as *mut u32;
@@ -134,25 +136,25 @@ const GPIO_OUT_CLR:*mut u32= 0xd000_0018 as *mut u32;
 
 #[panic_handler]
 pub fn panic(_info: &PanicInfo) -> ! {
-    loop { }
+  loop { }
 }
 ```
 
 ```rust {all}{startLine:18}
 #[entry]
 fn main() -> ! {
-    let gpio_ctrl = GPIOX_CTRL + 8 * pin as *mut u32;
-    unsafe {
-        write_volatile(gpio_ctrl, 5);
-        write_volatile(GPIO_OE_SET, 1 << pin);
-        let reg = match value {
-        0 => GPIO_OUT_CLR,
-        _ => GPIO_OUT_SET
-        };
-        write_volatile(reg, 1 << pin);
-    };
+  let gpio_ctrl = (GPIOX_CTRL + 8 * pin) as *mut u32;
+  unsafe {
+      write_volatile(gpio_ctrl, 5);
+      write_volatile(GPIO_OE_SET, 1 << pin);
+      let reg = match value {
+      0 => GPIO_OUT_CLR,
+      _ => GPIO_OUT_SET
+      };
+      write_volatile(reg, 1 << pin);
+  };
 
-    loop { }
+  loop { }
 }
 ```
 
