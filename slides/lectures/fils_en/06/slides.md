@@ -11,7 +11,7 @@ drawings:
 defaults:
   foo: true
 transition: slide-left
-title: MA - 07 - I2C & USB 2.0
+title: MA - 06 - I2C & USB 2.0
 mdc: true
 layout: cover
 themeConfig:
@@ -22,7 +22,7 @@ background:
 ---
 
 # I2C & USB 2.0
-Lecture 7
+Lecture 6
 
 ---
 

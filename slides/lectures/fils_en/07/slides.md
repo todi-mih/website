@@ -11,7 +11,7 @@ drawings:
 defaults:
   foo: true
 transition: slide-left
-title: MA - 03 - Exceptions and Interrupts
+title: MA - 07 - Exceptions and Interrupts
 mdc: true
 layout: cover
 themeConfig:
@@ -22,7 +22,7 @@ background:
 ---
 
 # Exceptions and Interrupts
-Lecture 3
+Lecture 7
 
 ---
 
