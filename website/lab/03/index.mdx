@@ -479,7 +479,7 @@ loop {
 :::info
 If you need to remember the layout of the board, check the [Lab Board](./02#the-lab-board) section from the previous lab.
 
-Remember that LEDs are wired so they light up on `Level::Low` and turn off on `Level::Low` and buttons return `Level::Low` when pressed and `Level::High` when not pressed.
+Remember that LEDs are wired so they light up on `Level::Low` and turn off on `Level::High` and buttons return `Level::Low` when pressed and `Level::High` when not pressed.
 :::
 
 :::danger 
@@ -492,7 +492,7 @@ Please make sure the lab professor verifies your circuit before it is powered up
 :::info
 You should use the lab skeleton provided in the [Lab Repository](https://github.com/UPB-PMRust/lab-2025) as a starting point for your implementation.
 
-Embassy will reset all the peripherals when the `main` function exists, that means `PWM` and `ADC` will stop. Make sure the `main` function never exits so you can see how the circuit behaves.
+Embassy will reset all the peripherals when the `main` function exits, that means `PWM` and `ADC` will stop. Make sure the `main` function never exits so you can see how the circuit behaves.
 :::
 
 2. Write a program using Embassy to control the led intensity using a potentiometer. The potentiometer is connected to an ADC-capable GPIO pin. The LED should change intensity based on the potentiometer's position. (**2p**) 
