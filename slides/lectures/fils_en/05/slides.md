@@ -11,7 +11,7 @@ drawings:
 defaults:
   foo: true
 transition: slide-left
-title: MA - 03 - UART & SPI
+title: MA - 05 - UART & SPI
 mdc: true
 layout: cover
 themeConfig:
@@ -22,7 +22,7 @@ background:
 ---
 
 # UART & SPI
-Lecture 6
+Lecture 5
 
 ---
 
