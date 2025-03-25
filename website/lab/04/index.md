@@ -1,7 +1,6 @@
 ---
 description: Asynchronous Programming with Embassy
 slug: /lab/04
-unlisted: true
 ---
 
 # 04 - Asynchronous Development
@@ -14,23 +13,61 @@ This lab will teach you the principles of asynchronous programming, and its appl
 1. **Bert Peters**, *[How does async Rust work](https://bertptrs.nl/2023/04/27/how-does-async-rust-work.html)* 
 2. **Omar Hiari**, *[Sharing Data Among Tasks in Rust Embassy: Synchronization Primitives](https://dev.to/apollolabsbin/sharing-data-among-tasks-in-rust-embassy-synchronization-primitives-59hk)* 
 
-## Asynchronous functions
+## Asynchronous functions and Tasks
 
-Up to now, during the labs, we've seen that, in order to be able to do multiple different actions "at once", we would use *tasks*. We would let the `main` function run, while also doing another action seemingly "in parallel" inside of another task. 
-Let's take the following example: if we want to blink an LED every second while also waiting for a button press to do something else, we would need to spawn a new task in which we would wait for the button press, while blinking the LED in the `main` function. 
+Until now you've only worked with simple (almost) serial programs. However, not all programs can be designed to run serially/sequentially. Handling multiple I/O events concurrently usually requires separate parallel tasks. 
+Example: Reading a button press while blinking an LED. A single loop would block the button reading event while waiting for the timer to finish.
 
-When thinking of how exactly this works, you would probably think that the task is running on a separate *thread* than the `main` function. Usually this would be the case when developing a normal computer application. Multithreading is possible, but requires a preemptive operating system. Without one, only one thread can independently run per processor core and that means that, since we are using only one core of the RP2040 (which actually has only 2), we would only be able to run **one thread at a time**. So how exactly does the task wait for the button press in parallel with the LED blinking? 
+```mermaid
+sequenceDiagram
+    participant Button as Button
+    participant Timer as Timer
+    participant Task as Main Task (LED + Button)
+    participant LED as LED Control
+    
+    loop
+    %% LED starts blinking
+    Task->>LED: Turn LED ON
+    Timer->>+Task: Delay 1 sec (Blocks everything)
+    
+    %% Button presses button during delay
+    Button-->>Task: Button Press Sent (but microcontroller is busy)
+ 
+    
+    Task->>-Task: Continue with next instruction
+    %% LED continues
+    Task->>LED: Turn LED OFF
+
+    Timer->>+Task: Delay 1 sec (Blocks everything)
+    Button-->>Task:Button Press Sent (but microcontroller is busy)
+
+    Task->>-Task: Continue with next instruction
+
+    %% Now the task checks the button, but it's too late
+
+    Task->>Button: Check if button is pressed
+    Button-->>Task: No press detected (press was missed)
+    end
+    
+    Note over Button, Button: User pressed button, but MCU was busy!
+    Note over Task: Button check happens too late.
+
+
+```
+
+ To address this issue, we would need to spawn a new task in which we would wait for the button press, while blinking the LED in the `main` function. 
+
+When thinking of how exactly this works, you would probably think that the task is running on a separate *thread* than the `main` function. Usually this would be the case when developing a normal computer application. Multithreading is possible, but requires a preemptive operating system. Without one, only one thread can independently run per processor core and that means that, since we are using only one core of the RP2350 (which actually has only 2), we would only be able to run **one thread at a time**. So how exactly does the task wait for the button press in parallel with the LED blinking? 
 Short answer is: it doesn't. In reality, both functions run asynchronously. 
-
-### Tasks
 
 A task in Embassy is represented by an *asynchronous function*. Asynchronous functions are different from normal functions, in the sense that they allow asynchronous code execution. Let's take an example from the previous lab:
 ```rust
 #[embassy_executor::task]
-async fn button_pressed(mut led: Output<'static, PIN_X>, mut button: Input<'static, PIN_X>) {
+async fn button_pressed(mut led: Output<'static>, mut button: Input<'static>) {
     loop {
 	info!("waiting for button press");
         button.wait_for_falling_edge().await;
+        led.toggle();
     }
 }
 
@@ -38,7 +75,7 @@ async fn button_pressed(mut led: Output<'static, PIN_X>, mut button: Input<'stat
 async fn main(spawner: Spawner) {
     let peripherals = embassy_rp::init(Default::default());
 
-    let button = Input::new(peripherals.PIN_X, Pull::Up);
+    let button = Input::new(peripherals.PIN_X, Pull::None);
     let led2 = Output::new(peripherals.PIN_X, Level::Low);
 
     spawner.spawn(button_pressed(led2, button)).unwrap();
@@ -196,7 +233,7 @@ let (res1, res2) = join(button.wait_for_falling_edge(), Timer::after_secs(5)).aw
 `join` returns a tuple containing the results of both `Future`s.
 
 
-## Channels
+## Channel
 
 Up to this point, to be able to share peripherals or data across multiple tasks, we have been using global `Mutex`s or passing them directly as parameters to the tasks. But there are other, more convenient ways to send data to and from tasks. Instead of having to make global, static variables that are shared by tasks, we could choose to only send the information that we need from one task to another. To achieve this, we can use *channels*.
 
@@ -248,107 +285,169 @@ that the value cannot be modified concurrently by two different tasks, or use ch
 To better understand the concepts of ownership and borrowing in Rust, take a look at [chapter 4](https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html) of the Rust Book.
 :::
 
-## Potentiometer
+### `Signal`
 
-A potentiometer is a three-terminal resistor with a sliding or rotating contact that forms an adjustable voltage divider. If only two terminals are used, one end and the wiper, it acts as a variable resistor or rheostat. A volume knob on a speaker is a potentiometer, for instance.
+This is similar to a `Channel` with a buffer size of 1, except “sending” to it (calling `Signal::signal`) when full will overwrite the previous value instead of waiting for the receiver to pop the previous value.
 
-![Potentiometer](images/potentiometer_pins.png)
+It is useful for sending data between tasks when the receiver only cares about the latest data, and therefore it's fine to “lose” messages. This is often the case for “state” updates.
+
+
+```rust
+
+use embassy_sync::signal::Signal;
+
+static SIG: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+
+#[embassy_executor::task]
+async fn waiter() {
+    SIG.wait().await; // Wait until signaled
+    defmt::info!("Signal received!");
+}
+
+#[embassy_executor::task]
+async fn trigger() {
+    SIG.signal(()); // Notify the waiting task
+}
+
+
+```
+
+### `PubSubChannel`
+
+This is a type of channel where any published message can be read by all subscribers. A publisher can choose how it sends its message.
+
+- With Pub::publish() the publisher has to wait until there is space in the internal message queue.
+- With Pub::publish_immediate() the publisher doesn't await and instead lets the oldest message in the queue drop if necessary. This will cause any Subscriber that missed the message to receive an error to indicate that it has lagged.
+
+Example:
+
+```rust
+
+use embassy_sync::pubsub::PubSubChannel;
+
+static PUB: PubSubChannel<CriticalSectionRawMutex, &'static str, 4, 2> = PubSubChannel::new();
+
+#[embassy_executor::task]
+async fn publisher() {
+    PUB.publisher().publish("Hello").await;
+}
+
+#[embassy_executor::task]
+async fn subscriber1() {
+    let mut sub = PUB.subscriber().unwrap();
+    let msg = sub.next_message().await;
+    defmt::info!("Sub 1 got: {}", msg);
+}
+
+#[embassy_executor::task]
+async fn subscriber2() {
+    let mut sub = PUB.subscriber().unwrap();
+    let msg = sub.next_message().await;
+    defmt::info!("Sub 2 got: {}", msg);
+}
+
+```
+
+
+## Buzzer
+
+A buzzer is a hardware device that emits sound. There are two types of buzzers:
+- *active buzzer* - connected to VCC and GND, with a resistance - emits a constant frequency
+- *passive buzzer* - connected to a GPIO pin and GND, with a resistance - frequency can be controlled through the pin with PWM
+
+![Buzzer](images/buzzer.png)
+
+:::tip
+To control the buzzer, all you need to do is to set the `top` value of the PWM config to match the frequency you want!
+:::
+
+#### How to wire an RGB LED
+
+The buzzer on the development board is connected to a pin in the J9 block.
+
+![board_buzzer](./images/board_buzzer.png)
 
 ## Exercises
 
-![Pico Explorer Pinout](../images/explorer_pins.jpg)
+1. Use two separate tasks to make the RED LED and BLUE LED blink 1 time per second. Instead of using `Timer::after_millis(time_interval).await` use *busy waiting* by starting a timer using `Instant::now();` and checking the elapsed time in a `while` loop using 
 
-1. Connect an LED to GP0, an RGB LED to GP1, GP2, GP5 and a potentiometer to ADC0. Use Kicad to draw the schematic. (**1p**)
-2. Change the monochromatic LED's intensity, using button A (SW_A) and button B(SW_B) on the Pico Explorer. Button A will increase the intensity, and button B will decrease it. (**2p**)
+```rust
+while start_time.elapsed().as_millis() < time_interval {}
+```
+
+You should notice that one of the tasks is not running. Why? (**1p**)
+    :::tip
+    Use a different task instance for each LED. You can spawn multiple instances of the same task, however you need to specify the pool size with `#[embassy_executor::task(pool_size = 2)]`. Take a look at [task-arena](https://docs.embassy.dev/embassy-executor/git/std/index.html#task-arena) for more info.
+    Use [`AnyPin`](https://docs.embassy.dev/embassy-rp/git/rp2040/gpio/struct.AnyPin.html) and blinking frequency parameters for the task. 
+    :::
+    
+2. Fix the usage of busy waiting from exercise 1 and make the 4 LEDs (YELLOW, RED, GREEN, BLUE) blink at different frequencies. (**1p**)
+
+Blink:
+
+| LED | frequency |
+|-|-|
+| YELLOW | 3 Hz |
+| RED | 4 Hz |
+| GREEN | 5 Hz |
+| BLUE | 1 Hz |
 
 :::tip
-- Use PWM to control the intensity.
-- Create two tasks, one for button A, one for button B. Use a channel to send commands from each button task to the main task.
+1 Hz means once per second.
 :::
 
-3. Control the RGB LED's color with buttons A, B, X and Y on the Pico Explorer. (**2p**)
-- Button A -> RGB = Red
-- Button B -> RGB = Green
-- Button X -> RGB = Blue
-- Button Y -> RGB = Led Off
-:::tip
-Use a separate task for each button. When a button press is detected, a command will be sent to the main task, and the main task will set the RGB LED's color according to that command.
+3. Write a firmware that changes the RED LED's intensity, using switch **SW_4** and switch **SW_5**. Switch **SW_4** will increase the intensity, and switch **SW_5** will decrease it. You will implement this in three ways: (**3p**)
+   
+   1. Use three tasks : `main` to control the LED and another two for each button (one for switch **SW_4**, one for switch **SW_5**). Use a [`Channel`](#channel) to send commands from each button task to the main task.
+    :::tip
+    Use an `enum` to define the LED Intensity change command for point i.
+    :::
+   2. Use a single task (`main`). Use [`select`](#select) to check which of the buttons were pressed and change the LED intensity accordingly. 
+   3. Use two tasks: `main` to control the LED and another one for both buttons. Use a [`Signal`](#signal) channel to transmit from the buttons task, the new value of the intensity which the LED will be set to. The `main` will wait for a new value on the `Signal` channel and change the intensity accordingly.
+    :::tip
+    Instead of sending commands over the channel like you did at point i, send the intensity value as a number.
+    :::
 
-:::warning
-When building Rust software in *debug mode*, which is what `cargo build` does, Rust will panic if mathematical operations underflow or overflow. This means that:
 
-```rust
-let v = 10u8;
-v -= 12;
-```
 
-will panic. To avoid this, you can use the [`wrapping_`](https://doc.rust-lang.org/std/primitive.u8.html#method.wrapping_add) and [`saturating_`](https://doc.rust-lang.org/std/primitive.u8.html#method.saturating_add) functions:
+4. Simulates a traffic light using the GREEN, YELLOW and RED LEDs on the board. Normally the traffic light goes from one state based on the time elapsed (Green -> 5s , Yellow Blink (4 times) -> 1s , Red -> 2s ).
+However if the switch **SW4** is pressed the state of traffic light changes immediately as shown in the diagram bellow.(**2p**)
 
-```rust
-let v = 10u8;
-// this will store 0 in v
-v = v.saturating_sub(12); 
-```
-:::
+    ```mermaid
+    flowchart LR
+        green(GREEN) -- Button pressed --> yellow(Yellow)
+        green(GREEN) -- 5s --> yellow(Yellow)
 
-```mermaid
-sequenceDiagram
-    autonumber
-    note right of TaskBtnA: waits for button A press
-    note right of TaskBtnB: waits for button B press
-    note right of TaskBtnX: waits for button X press
-    note right of TaskBtnY: waits for button Y press
-    note right of TaskMain: waits for LED command
-    Hardware-->>TaskBtnA: button A press
-    TaskBtnA-->>TaskMain: LedCommand(LedColor::Red)
-    note right of TaskMain: sets PWM configuration
-    TaskMain-->>Hardware: sets RGB LED color RED
-    Hardware-->>TaskBtnX: button X press
-    TaskBtnX-->>TaskMain: LedCommand(LedColor::Blue)
-    note right of TaskMain: sets PWM configuration
-    TaskMain-->>Hardware: sets RGB LED color BLUE
-```
-:::
+        
+        yellow(YELLOW - Blink 4 times/second) -- Button pressed --> red(RED)
 
-4. In addition to the four buttons, control the RGB LED's intensity with the potentiometer. (**3p**)
+        yellow(YELLOW - Blink 4 times/second) -- 1s --> red(RED)
 
-:::tip
-You will need another task in which you sample the ADC and send the values over a channel.
-You could do this in one of two ways:
-1. Use a single channel for both changing the color and the intensity of the LED. Button tasks and the potentiometer task will send over the same channel. For this, you will need to change the type of data that is sent over the channel to encapsulate both types of commands. For example, you could use an enum like this:
-```rust
-enum LedCommand {
-    ChangeColor(Option<LedColor>),
-    ChangeIntensity(u16)
-}
-```
-2. Use two separate channels, one for sending the color command (which contains the LedColor), and one for sending the intensity. You can `await` both channel `receive()` futures inside of a `select` to see which command is received first, and handle it.
-Example:
-```rust
-let select = select(COLOR_CHANNEL.receive(), INTENSITY_CHANNEL.receive()).await;
-match select {
-    First(color) => {
-        // ...
-    },
-    Second(intensity) => {
-        // ...
-    }
-}
-```
-:::
+        red(RED) -- Button pressed --> red(RED)
+        red(RED) -- 2s --> green(GREEN)
 
-5. Print to the screen of the Pico Explorer the color of the RGB LED and its intensity. Use the SPI screen driver provided in the lab skeleton. (**2p**)
-:::tip
-To write to the screen, use this example:
-```rust
-let mut text = String::<64>::new();
-write!(text, "Screen print: ", led_color).unwrap(); // led_color must be defined first
+        classDef red fill:#ff0000,stroke:#000000,color: #ffffff
+        classDef yellow fill:#efa200,stroke:#000000
+        classDef green fill:#00ce54,stroke:#000000
 
-Text::new(&text, Point::new(40, 110), style)
-    .draw(&mut display)
-    .unwrap();
+        class red red
+        class yellow yellow
+        class green green
+    ```
 
-// Small delay for yielding
-Timer::after_millis(1).await;
-```
-:::
+    :::tip
+    For this exercise you only need one task. Define an `enum` to save the traffic light state (`Green`, `Yellow`,`Red`). Use `match` to check the current state of the traffic light. Then you need to wait for two futures, since the traffic light changes its color either because some time has elapsed or because the button was pressed. Use `select` to check which future completes first (`Timer` or button press).
+    :::
+
+5.  Continue exercise 4: this time, if switch **SW4** and switch **SW7** are pressed consecutively, change the state of the traffic light. Use `join` to check that both switches were pressed. (**1p**)
+   :::note
+    The switches don't need to be pressed at the same time, but one after the other. The order does not matter.
+   :::
+
+6. Continue exercise 5:
+   - add a new task to control the buzzer. The buzzer should make a continuous low frequency (200Hz) sound while the traffic light is green or yellow and should start beeping (at 400Hz) on and off while the traffic light is red (Use the [formula from Lab03](./03#calculating-the-top-value) to calculate the frequency) . (**1p**)
+   - add a new task for a servo motor. Set the motor position at 180° when the light is green, 90° the light is yellow, and 0° if its red. (**1p**)
+   :::tip
+    Use a `PubSubChannel` to transmit the state of the traffic light from the LEDs task to both the buzzer and the servo motor tasks.
+   :::
+
