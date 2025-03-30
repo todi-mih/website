@@ -398,12 +398,12 @@ Blink:
 
 3. Write a firmware that changes the RED LED's intensity, using switch **SW_4** and switch **SW_5**. Switch **SW_4** will increase the intensity, and switch **SW_5** will decrease it. You will implement this in three ways: (**3p**)
    
-   1. Use three tasks : `main` to control the LED and another two for each button (one for switch **SW_4**, one for switch **SW_5**). Use a [`Channel`](#channel) to send commands from each button task to the main task.
+   1. Use three tasks : one task will be the `main` to control the LED and another two tasks for each button (one for switch **SW_4**, one for switch **SW_5**). Use a [`Channel`](#channel) to send commands from each button task to the main task.
     :::tip
     Use an `enum` to define the LED Intensity change command for point i.
     :::
    2. Use a single task (`main`). Use [`select`](#select) to check which of the buttons were pressed and change the LED intensity accordingly. 
-   3. Use two tasks: `main` to control the LED and another one for both buttons. Use a [`Signal`](#signal) channel to transmit from the buttons task, the new value of the intensity which the LED will be set to. The `main` will wait for a new value on the `Signal` channel and change the intensity accordingly.
+   3. Use two tasks: one taks will be the `main` to control the LED and another one for both buttons. Use a [`Signal`](#signal) channel to transmit from the buttons task, the new value of the intensity which the LED will be set to. The `main` will wait for a new value on the `Signal` channel and change the intensity accordingly.
     :::tip
     Instead of sending commands over the channel like you did at point i, send the intensity value as a number.
     :::
@@ -439,9 +439,11 @@ However if the switch **SW4** is pressed the state of traffic light changes imme
     For this exercise you only need one task. Define an `enum` to save the traffic light state (`Green`, `Yellow`,`Red`). Use `match` to check the current state of the traffic light. Then you need to wait for two futures, since the traffic light changes its color either because some time has elapsed or because the button was pressed. Use `select` to check which future completes first (`Timer` or button press).
     :::
 
-5.  Continue exercise 4: this time, if switch **SW4** and switch **SW7** are pressed consecutively, change the state of the traffic light. Use `join` to check that both switches were pressed. (**1p**)
+5.  Continue exercise 4: this time, instead of using only the switch **SW4** to change the state of traffic light, we will use the switches **SW4** and **SW7** pressed consecutively to trigger a state change of the traffic light. Use `join` to check that both switches were pressed. (**1p**)
    :::note
     The switches don't need to be pressed at the same time, but one after the other. The order does not matter.
+
+    The traffic light transitions between states either based on the elapsed time or through pressing the switches as described above.
    :::
 
 6. Continue exercise 5:
