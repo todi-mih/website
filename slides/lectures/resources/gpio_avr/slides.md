@@ -20,7 +20,7 @@ A simple GPIO
 
 <br>
 
-> <b> DDRx - Data Direction Register. </b> If the data direction bit is 1, the pin is an input. 0 is an output.
+> <b> DDRx - Data Direction Register. </b> If the data direction bit is 0, the pin is an input. 1 is an output.
 
 ```c
 DDRB &= ~(1<<DDB7); // Makes pin PB7 an input
