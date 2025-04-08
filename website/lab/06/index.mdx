@@ -241,9 +241,9 @@ The `temp` contains the raw temperature measurement data. The measurement output
 
 | Address | Name | Description |
 | - | - | - |
-| 0xF7 | `temp_msb` | Contains the most significant 8 bits (**temp[19:12]**) of the raw temperature measurement output data. |
-| 0xF8 | `temp_lsb` | Contains the next 8 bits (**temp[11:4]**) of the raw temperature measurement output data. |
-| 0xF9 (bit 7, 6, 5, 4) | `temp_xlsb` | Contains the last 4 bits (**temp[3:0]**) of the raw temperature measurement output data. |
+| 0xFA | `temp_msb` | Contains the most significant 8 bits (**temp[19:12]**) of the raw temperature measurement output data. |
+| 0xFB | `temp_lsb` | Contains the next 8 bits (**temp[11:4]**) of the raw temperature measurement output data. |
+| 0xFC (bit 7, 6, 5, 4) | `temp_xlsb` | Contains the last 4 bits (**temp[3:0]**) of the raw temperature measurement output data. |
 
 :::tip Reading the raw temperature value
 To determine the raw temperature measurement, you need to first read the `temp_msb`, `temp_lsb` and `temp_xlsb` register values, then compute the raw value:
