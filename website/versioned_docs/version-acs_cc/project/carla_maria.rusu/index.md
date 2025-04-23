@@ -89,18 +89,22 @@ To-do
 
 ### Hardware
 
-| Item                            | Quantity | Unit Price (RON) | Total (RON) | Notes                              |
-|---------------------------------|----------|------------------|-------------|------------------------------------|
-| Raspberry Pi Pico 2W            | 1        | 39.66            | 39.66       | Main controller                    |
-| DAC UDA1334A I2S Module         | 1        | 56.76            | 56.76       | I2S DAC with stereo output         |
-| Header pins (2.54 mm, 40p)      | 2        | 0.99             | 1.98        | For soldering to Pico              |
-| Breadboard (830 tie points)     | 1        | 9.98             | 9.98        | Main prototyping base              |
-| Push Button (white round cap)   | 3        | 1.99             | 5.97        | Play, Next, Previous controls      |
-| LCD SPI Display 1.8" (128x160)  | 1        | 28.99            | 28.99       | Visual interface for the player    |
-| Breadboard rigid wires          | 1        | 12.49            | 12.49       | Manual connections (precise)       |
-| Breadboard jumper wires         | 1        | 7.99             | 7.99        | Flexible jumper wires              |
+| Item                                      | Quantity | Unit Price (RON) | Total (RON) | Notes                                    |
+|-------------------------------------------|----------|------------------|-------------|------------------------------------------|
+| Raspberry Pi Pico 2W                      | 1        | 39.66            | 39.66       | Main controller                          |
+| Raspberry Pi Pico (debug / Picoprobe)     | 1        | 39.66            | 39.66       | Used for SWD debugging                   |
+| UDA1334A I2S DAC Module                   | 1        | 56.76            | 56.76       | Audio output module                      |
+| LCD SPI Display 1.8" (128x160) with SD slot | 1      | 28.99            | 28.99       | Used for UI and microSD (via SPI)        |
+| Push Button (white round cap)             | 3        | 1.99             | 5.97        | Play, Next, Previous controls            |
+| Rotary Encoder Module                     | 1        | 4.99             | 4.99        | Volume and/or track navigation           |
+| 10k Stereo Potentiometer                  | 1        | 1.99             | 1.99        | Analog volume control (ADC input)       |
+| Breadboard HQ (830 points)                | 2        | 9.98             | 19.96       | For main Pico + Picoprobe wiring         |
+| Header pins (2.54 mm, 40p)                | 2        | 0.99             | 1.98        | For soldering Pico and accessories       |
+| Female Breakable Header (40p)             | 1        | 2.56             | 2.56        | Extra connectivity (LCD/SD)              |
+| Breadboard rigid wires                    | 1        | 12.49            | 12.49       | Neat wiring on breadboard                |
+| Breadboard jumper wires                   | 1        | 7.99             | 7.99        | General-purpose jumpers                  |
 
-Total Estimated Cost (RON): 163.92 RON (for now)
+Total Estimated Cost: 229.60 RON (for now)
 
 ### Software
 
