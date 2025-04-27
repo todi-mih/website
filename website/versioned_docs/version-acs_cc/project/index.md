@@ -46,12 +46,28 @@ The repositories will be checked by the lab assistant at during lab reserved for
 
 Students will have to build and showcase the hardware with the running software at PM Fair. On the presentation day, **students will upload the source code to the hardware** and the demo will be done live in front of the committee.
 
+## Website build pre-requisites
+
+:::danger Windows support
+If you are using Windows, you will either need to install WSL2, for which you will find a detailed tutorial [here](https://learn.microsoft.com/en-us/windows/wsl/install), or use a VM with Ubuntu, Debian or another Linux based OS.
+:::
+
+You will need to install `npm` and `node` and the simples way to do that can be found on [Node.js Official Website](https://nodejs.org/en/download/).
+
+:::note WSL2
+If you are using WSL2, you should follow the instructions for installing on Linux.
+:::
+
 ## How to create a page for your project?
 
-1. Please login with your UPB login to [Gitlab](https://gitlab.cs.pub.ro) 
+:::important Windows Users
+These steps should be performed on inside your **VM**, or in **WSL2**, **not on your host machine**.
+:::
+
+1. Please login with your UPB login to [Gitlab](https://gitlab.cs.pub.ro)
 2. You will have to add an SSH Key to your Gitlab account. This will allow you to push code without entering you username and password every time. For this, run the following command in the Windows/Linux/macOS's console: `ssh-keygen -t rsa -b 2048`. Press press ENTER until you exit the respective command prompts.
  - If your command prompt `Overwrite (y/n)?` press `n` and run the above command again, changing the destination of the key.
- - If the key was generated successfully, you will have the keys generated in the location indicated by the command `Enter file in which to save the key (C:\Users\"NAME"/.ssh/id_rsa):`
+ - If the key was generated successfully, you will have the keys generated in the location indicated by the command `Enter file in which to save the key (/home/"NAME"/.ssh/id_rsa):`
  - Read the content of the file `id_rsa.pub` or the name you gave to the file and transfer it to Github.
  - Login to [Gitlab](https://gitlab.cs.pub.ro/) and go to: [SSH Keys](https://gitlab.cs.pub.ro/-/user_settings/ssh_keys).
  - Click on *Add new key* and insert into the *Key* textbox your key from `id_rsa.pub`.
@@ -71,9 +87,21 @@ Students will have to build and showcase the hardware with the running software 
 
 7. To start creating your page for the project, go to `website/versioned_docs/version-acs_cc/project/2025` and create a new directory with your curs.upb.ro username. Example: `andrei_paul.zamfir`.
 
-8. In that directory you must create a file named `index.md` which will be your project page. You can take a look at the [Markdown](https://www.markdownguide.org/cheat-sheet/) syntax. You can look at [last year's projects and template](https://gitlab.cs.pub.ro/pmrust/pmrust.pages.upb.ro/-/tree/main/website/versioned_docs/version-fils_en/project/2024)
+8. In that directory you must create a file named `index.md` which will be your project page. This page must follow the project [template page](./2025/template.md) You can take a look at the [Markdown](https://www.markdownguide.org/cheat-sheet/) syntax. You can look at [last year's projects](https://gitlab.cs.pub.ro/pmrust/pmrust.pages.upb.ro/-/tree/main/website/versioned_docs/version-fils_en/project/2024).
 
-9. After finishing the project, make a _merge request_ to the [upstream repository](https://gitlab.cs.pub.ro/pmrust/pmrust.pages.upb.ro)
+9. To build and test the website, you can run the `./build_website.sh` in the project's root folder, then run `cd ./website/ && npm run serve`.
+
+:::note Development process
+After running the script, you could run `npm run start` instead of `serve`. This would ensure that the changes you are making in your Markdown file reflect in the running build (without needing to rebuild the project over and over again). But make sure to re-run the build script when you are done, because some subtle bugs may not be caught by this method.
+:::
+
+10. After finishing the project, make a _merge request_ to the [upstream repository](https://gitlab.cs.pub.ro/pmrust/pmrust.pages.upb.ro). Do not forget to change the Merge Request Description template to **project**.
+
+![Merge Request Template](../../../static/img/MR_template.webp)
+
+:::info Merge Request contents
+The merge requests should contain only the Markdown page, and additional images in `svg` or `webp` format that must not exceed **1024x768** pixels.
+:::
 
 ## Hardware Rules
 
