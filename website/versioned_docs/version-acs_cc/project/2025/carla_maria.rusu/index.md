@@ -86,7 +86,9 @@ The following hardware was used:
 
 ### Schematic
 
-To-do in Kicad
+Tried to do something in Kicad (not for dark mode)
+
+![alt text](Audio_Player.svg)
 
 ### Bill of Materials
 
