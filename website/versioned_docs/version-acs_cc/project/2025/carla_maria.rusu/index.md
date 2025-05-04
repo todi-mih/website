@@ -80,7 +80,7 @@ The following hardware was used:
 - Raspberry Pi Pico 2W
 - UDA1334A I2S DAC with 3.5mm jack socket
 - LCD with built-in SD slot (will see if this is the best option)
-- 10k potentiometer/Rotary Encoder (not sure which I will use)
+- Rotary Encoder
 - 3 push buttons
 - Breadboards and jumper wires
 
@@ -97,7 +97,7 @@ Tried to do something in Kicad (not for dark mode)
 | Raspberry Pi Pico 2W                      | 1        | 39.66            | 39.66       | Main controller                          |
 | Raspberry Pi Pico (debug / Picoprobe)     | 1        | 39.66            | 39.66       | Used for SWD debugging                   |
 | UDA1334A I2S DAC Module                   | 1        | 56.76            | 56.76       | Audio output module                      |
-| LCD SPI Display 1.8" (128x160) with SD slot | 1      | 28.99            | 28.99       | Used for UI and microSD (via SPI)        |
+| LCD SPI Display 1.8" (128x160) with SD slot | 1      | 28.99            | 28.99       | Used for UI and SD (via SPI)        |
 | Push Button (white round cap)             | 3        | 1.99             | 5.97        | Controls            |
 | Rotary Encoder Module                     | 1        | 4.99             | 4.99        | Controls           |
 | 10k Stereo Potentiometer                  | 1        | 1.99             | 1.99        | Analog Control (ADC input)       |
@@ -122,14 +122,17 @@ To-do : complete later when I've finished
 | [embassy](https://github.com/embassy-rs/embassy) | Async embedded framework | Core runtime for async tasks and peripherals |
 | [embassy-rp](https://github.com/embassy-rs/embassy) | HAL for Raspberry Pi Pico (RP2040) | Controls GPIOs, SPI, I2S, etc. |
 | [embedded-graphics](https://github.com/embedded-graphics/embedded-graphics) | 2D graphics library | Used for drawing text and shapes on LCD |
-| [mipidsi](https://github.com/almindor/mipidsi) | Generic MIPI DSI display driver | Driver for ILI9341 LCD |
+| [mipidsi](https://github.com/almindor/mipidsi) | Generic MIPI DSI display driver | Driver for ST7735 LCD |
 | [display-interface-spi](https://github.com/almindor/display-interface) | SPI display abstraction | Connects the embedded-graphics to SPI-based displays |
 | [embedded-sdmmc](https://github.com/rust-embedded-community/embedded-sdmmc-rs) | FAT filesystem over SD card | Used to read `.wav` files from SD card |
 | [embedded-hal](https://github.com/rust-embedded/embedded-hal) | Traits for embedded devices | Base for SPI, I2S, ADC, GPIO, etc. |
 | [defmt](https://github.com/knurling-rs/defmt) | Logging crate for embedded | For debugging and structured logs |
-| [micromath](https://github.com/NeoBirth/micromath) | Lightweight math functions | Used for calculations (e.g. UI animation, signal analysis) |
+| [micromath](https://github.com/NeoBirth/micromath) | Lightweight math functions | Used for simulations of sound waves |
 
 
 ---
 
 ## Links
+
+- [PIO Programs](https://github.com/embassy-rs/embassy/tree/93ff90db04f06316f0992b65a0319ebdf74ce5c4/embassy-rp/src/pio_programs) : Helped me with drivers for I2S and Rotary Encoder
+
