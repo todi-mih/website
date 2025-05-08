@@ -45,4 +45,4 @@ jobs:
         run: npm run build
 
       - name: GitLab Pages Script
-        run: cp gitlab-deploy.yml webiste/build/.gitlab-ci.yml
+        run: cp gitlab-deploy.yml website/build/.gitlab-ci.yml
