@@ -1,0 +1,3 @@
+- name: "Project"
+  description: "Use this template when submitting a project"
+  file: project.md
