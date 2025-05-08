@@ -69,6 +69,7 @@ jobs:
           user_email: 41898282+github-actions[bot]@users.noreply.github.com
   push:
     needs: deploy
+    name: Deploy to pages
     runs-on: ubuntu-latest
 
     steps:
