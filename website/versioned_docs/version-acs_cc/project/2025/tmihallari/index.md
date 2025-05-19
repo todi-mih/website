@@ -74,8 +74,8 @@ Function: Connect all the components
 
 ### Schematics
 
-![Schematic 1](no1.webp)
-![Schematic 2](no2.webp)
+![Schematic 1](no1.svg)
+![Schematic 2](no2.svg)
 
 ![Photo 1](pic1.webp)
 ![Photo 2](pic2.webp)
