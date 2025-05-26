@@ -1,4 +1,4 @@
-# Project Name
+# Microbit mini-console
 Microbit mini-console.
 
 :::info 
